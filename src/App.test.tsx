@@ -1,130 +1,80 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { trackRegion } from "./lib/api";
+import { analyzeChroma, previewChroma, renderChromaReplacement } from "./lib/api";
+
+const transparentImage = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+const roi = { x: 10, y: 8, width: 80, height: 64 };
 
 vi.mock("./lib/api", () => ({
-  analyzeTarget: vi.fn(async () => ({
+  analyzeChroma: vi.fn(async () => ({
     frame: {
       width: 100,
       height: 80,
       fps: 24,
       frame_count: 24,
       duration: 1,
-      image: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==",
+      image: transparentImage,
       index: 0,
       time: 0,
     },
-    candidates: [
-      {
-        id: "manual",
-        label: "手动区域",
-        quad: [
-          [10, 10],
-          [60, 10],
-          [60, 60],
-          [10, 60],
-        ],
-        confidence: 0.8,
-        reason: "默认区域",
-      },
+    mask_image: transparentImage,
+    roi,
+    screen_quad: [
+      [10, 8],
+      [90, 8],
+      [90, 72],
+      [10, 72],
     ],
+    green_coverage: 0.5,
   })),
-  generateAiKeyframes: vi.fn(async () => []),
   healthCheck: vi.fn(async () => true),
-  readFramePreview: vi.fn(async () => ({
+  previewChroma: vi.fn(async () => ({
     width: 100,
     height: 80,
     fps: 24,
     frame_count: 24,
     duration: 1,
-    image: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==",
-    index: 12,
-    time: 0.5,
+    image: transparentImage,
+    index: 0,
+    time: 0,
+    metrics: { roi, screen_quad: null, green_coverage: 0.5 },
   })),
-  renderReplacement: vi.fn(),
-  selectLocalPath: vi.fn(),
-  trackRegion: vi.fn(async (_backendUrl, _sourcePath, _baseQuad, keyframes = []) => ({
+  renderChromaReplacement: vi.fn(async () => ({
+    output_path: "/tmp/out.mp4",
     frame_count: 24,
-    fps: 24,
-    frames: [
-      {
-        index: 0,
-        time: 0,
-        quad: keyframes[0]?.quad ?? [
-          [10, 10],
-          [60, 10],
-          [60, 60],
-          [10, 60],
-        ],
-        status: "estimated",
-      },
-    ],
+    duration: 1,
+    audio_policy: "original",
   })),
+  selectLocalPath: vi.fn(),
 }));
 
-vi.mock("./lib/settings", () => ({
-  loadAiSettings: vi.fn(() => ({
-    apiBaseUrl: "https://api.openai.com/v1",
-    apiKey: "",
-    model: "gpt-4.1-mini",
-  })),
-  saveAiSettings: vi.fn(),
-}));
-
-describe("App keyframe retracking", () => {
-  it("rebuilds tracking after saving and deleting manual keyframes", async () => {
+describe("App chroma-key wizard", () => {
+  it("analyzes, previews, and renders a green-screen replacement", async () => {
     render(<App />);
 
-    fireEvent.change(screen.getByPlaceholderText("/Users/me/source.mp4"), {
+    fireEvent.change(screen.getByLabelText("主体视频"), {
       target: { value: "/tmp/source.mp4" },
     });
-    fireEvent.change(screen.getByPlaceholderText("/Users/me/replacement.mp4"), {
+    fireEvent.change(screen.getByLabelText("替换视频"), {
       target: { value: "/tmp/replacement.mp4" },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /载入首帧/ }));
-    await screen.findByText("手动区域");
-
-    fireEvent.click(screen.getByRole("button", { name: /开始追踪/ }));
-    await waitFor(() => expect(trackRegion).toHaveBeenCalledTimes(1));
-
-    fireEvent.change(screen.getByLabelText("四角坐标（左上、右上、右下、左下）"), {
-      target: { value: "12,12 62,12 62,62 12,62" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /保存当前帧修正/ }));
-
-    await waitFor(() => expect(trackRegion).toHaveBeenCalledTimes(2));
-    expect(trackRegion).toHaveBeenLastCalledWith(
-      "http://127.0.0.1:8765",
-      "/tmp/source.mp4",
-      [
-        [12, 12],
-        [62, 12],
-        [62, 62],
-        [12, 62],
-      ],
-      [
-        expect.objectContaining({
-          index: 0,
-          source: "manual",
-        }),
-      ],
+    fireEvent.click(screen.getByRole("button", { name: /识别绿幕/ }));
+    await screen.findByText(/已识别绿幕/);
+    expect(analyzeChroma).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourcePath: "/tmp/source.mp4",
+        roi: null,
+      }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "删除关键帧" }));
+    fireEvent.click(screen.getByRole("button", { name: /生成预览/ }));
+    await waitFor(() => expect(previewChroma).toHaveBeenCalledWith(expect.objectContaining({ roi })));
+    await screen.findByText(/预览已生成/);
 
-    await waitFor(() => expect(trackRegion).toHaveBeenCalledTimes(3));
-    expect(trackRegion).toHaveBeenLastCalledWith(
-      "http://127.0.0.1:8765",
-      "/tmp/source.mp4",
-      [
-        [12, 12],
-        [62, 12],
-        [62, 62],
-        [12, 62],
-      ],
-      [],
-    );
+    fireEvent.click(screen.getByRole("button", { name: /导出 MP4/ }));
+    await waitFor(() => expect(renderChromaReplacement).toHaveBeenCalledTimes(1));
+    expect(await screen.findAllByText(/导出完成/)).toHaveLength(2);
   });
 });
