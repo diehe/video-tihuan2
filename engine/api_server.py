@@ -91,7 +91,7 @@ class ChromaPreviewRequest(BaseModel):
     roi: dict[str, int] | None = None
     fit_mode: str = "cover"
     feather: int = 3
-    mask_grow: int = -1
+    mask_grow: int = 3
 
 
 class ChromaRenderRequest(BaseModel):
@@ -102,7 +102,7 @@ class ChromaRenderRequest(BaseModel):
     audio_policy: AudioPolicy = AudioPolicy.ORIGINAL
     fit_mode: str = "cover"
     feather: int = 3
-    mask_grow: int = -1
+    mask_grow: int = 3
 
 
 class SelectPathResult(BaseModel):

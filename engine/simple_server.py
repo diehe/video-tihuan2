@@ -41,7 +41,7 @@ class ChromaRenderRequest(BaseModel):
     audio_policy: AudioPolicy = AudioPolicy.ORIGINAL
     fit_mode: str = "cover"
     feather: int = 3
-    mask_grow: int = -1
+    mask_grow: int = 3
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -120,7 +120,7 @@ class Handler(BaseHTTPRequestHandler):
                     roi=payload.get("roi"),
                     fit_mode=payload.get("fit_mode", "cover"),
                     feather=int(payload.get("feather", 3)),
-                    mask_grow=int(payload.get("mask_grow", -1)),
+                    mask_grow=int(payload.get("mask_grow", 3)),
                 )
             )
             return

@@ -770,6 +770,28 @@ def test_compose_chroma_frame_only_replaces_green_pixels_inside_roi() -> None:
     assert metrics.green_coverage > 0.2
 
 
+def test_compose_chroma_frame_default_settings_cover_green_edge_halo() -> None:
+    source = np.zeros((140, 190, 3), dtype=np.uint8)
+    source[:, :] = (32, 34, 38)
+    cv2.rectangle(source, (58, 18), (142, 122), (0, 245, 0), -1)
+    cv2.rectangle(source, (62, 24), (138, 116), (0, 150, 0), 2)
+    replacement = np.zeros((72, 72, 3), dtype=np.uint8)
+    replacement[:, :] = (36, 28, 220)
+
+    composed, _ = pipeline.compose_chroma_frame(
+        source,
+        replacement,
+        roi={"x": 46, "y": 10, "width": 112, "height": 122},
+        fit_mode="cover",
+    )
+
+    for y, x in [(20, 60), (70, 58), (70, 142), (121, 100)]:
+        b, g, r = composed[y, x]
+        assert r > 120
+        assert g < 90
+        assert g < r * 0.75
+
+
 def test_render_chroma_replacement_writes_video(tmp_path: Path) -> None:
     source = tmp_path / "source.mp4"
     replacement = tmp_path / "replacement.mp4"

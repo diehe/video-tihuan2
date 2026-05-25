@@ -47,7 +47,7 @@ export const initialState: AppState = {
   audioPolicy: "original",
   fitMode: "cover",
   feather: 3,
-  maskGrow: -1,
+  maskGrow: 3,
   roi: null,
   chromaAnalysis: null,
   chromaPreview: null,

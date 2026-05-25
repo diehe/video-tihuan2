@@ -373,7 +373,7 @@ def compose_chroma_frame(
     roi: dict[str, int] | None = None,
     fit_mode: str = "cover",
     feather: int = 3,
-    mask_grow: int = -1,
+    mask_grow: int = 3,
 ) -> tuple[np.ndarray, ChromaFrameMetrics]:
     height, width = source.shape[:2]
     normalized_roi = _normalize_roi(roi, width, height)
@@ -389,8 +389,9 @@ def compose_chroma_frame(
 
     mask = _adjust_chroma_mask(raw_mask, feather=feather, mask_grow=mask_grow)
     warped = _warp_replacement_to_quad(replacement, quad, width, height, fit_mode)
+    cleaned_source = _despill_green_source(source, mask)
     alpha = (mask.astype(np.float32) / 255.0)[:, :, None]
-    composed = source.astype(np.float32) * (1 - alpha) + warped.astype(np.float32) * alpha
+    composed = cleaned_source.astype(np.float32) * (1 - alpha) + warped.astype(np.float32) * alpha
     return np.clip(composed, 0, 255).astype(np.uint8), metrics
 
 
@@ -401,7 +402,7 @@ def preview_chroma_replacement(
     roi: dict[str, int] | None = None,
     fit_mode: str = "cover",
     feather: int = 3,
-    mask_grow: int = -1,
+    mask_grow: int = 3,
 ) -> ChromaPreviewResult:
     source = _open_capture(source_path)
     replacement = _open_capture(replacement_path)
@@ -453,7 +454,7 @@ def render_chroma_replacement(
     audio_policy: AudioPolicy = AudioPolicy.ORIGINAL,
     fit_mode: str = "cover",
     feather: int = 3,
-    mask_grow: int = -1,
+    mask_grow: int = 3,
 ) -> RenderResult:
     source = _open_capture(source_path)
     replacement = _open_capture(replacement_path)
@@ -1509,6 +1510,18 @@ def _adjust_chroma_mask(mask: np.ndarray, feather: int, mask_grow: int) -> np.nd
         kernel_size = radius * 2 + 1
         adjusted = cv2.GaussianBlur(adjusted, (kernel_size, kernel_size), 0)
     return adjusted
+
+
+def _despill_green_source(source: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    cleaned = source.copy().astype(np.float32)
+    b = cleaned[:, :, 0]
+    g = cleaned[:, :, 1]
+    r = cleaned[:, :, 2]
+    max_rb = np.maximum(r, b)
+    spill = (mask > 0) & (g > max_rb * 1.08 + 12)
+    g[spill] = max_rb[spill] * 0.92
+    cleaned[:, :, 1] = g
+    return np.clip(cleaned, 0, 255).astype(np.uint8)
 
 
 def _warp_replacement_to_quad(

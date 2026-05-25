@@ -4,6 +4,7 @@ import { appReducer, canAnalyze, canPreview, canRender, initialState } from "./w
 describe("workflow reducer", () => {
   it("defaults to cover fit mode for phone-screen green-screen replacement", () => {
     expect(initialState.fitMode).toBe("cover");
+    expect(initialState.maskGrow).toBe(3);
   });
 
   it("requires source, replacement, and backend before chroma analysis", () => {

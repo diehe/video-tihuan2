@@ -216,9 +216,9 @@ export function App() {
                   onChange={(event) => dispatch({ type: "setFeather", feather: Number(event.target.value) })}
                 />
               </Field>
-              <Field label="Mask 调整">
+              <Field label="边缘扩展">
                 <input
-                  aria-label="Mask 调整"
+                  aria-label="边缘扩展"
                   min="-8"
                   max="8"
                   type="number"
