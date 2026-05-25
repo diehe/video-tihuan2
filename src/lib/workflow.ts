@@ -1,6 +1,16 @@
-import type { AnalyzeResult, AudioPolicy, FitMode, Quad, RenderResult, TrackingResult } from "./types";
+import type {
+  AnalyzeResult,
+  AudioPolicy,
+  ChromaAnalyzeResult,
+  ChromaPreviewResult,
+  FitMode,
+  Quad,
+  Rect,
+  RenderResult,
+  TrackingResult,
+} from "./types";
 
-export type JobStatus = "idle" | "analyzing" | "calibrating" | "tracking" | "rendering" | "done" | "error";
+export type JobStatus = "idle" | "analyzing" | "previewing" | "calibrating" | "tracking" | "rendering" | "done" | "error";
 
 export interface AppState {
   backendUrl: string;
@@ -12,6 +22,11 @@ export interface AppState {
   outputPath: string;
   audioPolicy: AudioPolicy;
   fitMode: FitMode;
+  feather: number;
+  maskGrow: number;
+  roi: Rect | null;
+  chromaAnalysis: ChromaAnalyzeResult | null;
+  chromaPreview: ChromaPreviewResult | null;
   analysis: AnalyzeResult | null;
   baseQuad: Quad | null;
   confirmedQuad: Quad | null;
@@ -30,7 +45,12 @@ export const initialState: AppState = {
   replacementPath: "",
   outputPath: "",
   audioPolicy: "original",
-  fitMode: "stretch",
+  fitMode: "cover",
+  feather: 3,
+  maskGrow: -1,
+  roi: null,
+  chromaAnalysis: null,
+  chromaPreview: null,
   analysis: null,
   baseQuad: null,
   confirmedQuad: null,
@@ -50,7 +70,12 @@ export type Action =
   | { type: "setOutputPath"; path: string }
   | { type: "setAudioPolicy"; audioPolicy: AudioPolicy }
   | { type: "setFitMode"; fitMode: FitMode }
+  | { type: "setFeather"; feather: number }
+  | { type: "setMaskGrow"; maskGrow: number }
+  | { type: "setRoi"; roi: Rect | null }
   | { type: "setStatus"; status: JobStatus; message: string }
+  | { type: "setChromaAnalysis"; analysis: ChromaAnalyzeResult }
+  | { type: "setChromaPreview"; preview: ChromaPreviewResult }
   | { type: "setAnalysis"; analysis: AnalyzeResult }
   | { type: "setBaseQuad"; quad: Quad }
   | { type: "confirmQuad"; quad: Quad }
@@ -80,8 +105,31 @@ export function appReducer(state: AppState, action: Action): AppState {
       return { ...state, audioPolicy: action.audioPolicy };
     case "setFitMode":
       return { ...state, fitMode: action.fitMode };
+    case "setFeather":
+      return { ...state, feather: action.feather, chromaPreview: null, renderResult: null };
+    case "setMaskGrow":
+      return { ...state, maskGrow: action.maskGrow, chromaPreview: null, renderResult: null };
+    case "setRoi":
+      return { ...state, roi: action.roi, chromaAnalysis: null, chromaPreview: null, renderResult: null };
     case "setStatus":
       return { ...state, status: action.status, message: action.message };
+    case "setChromaAnalysis":
+      return {
+        ...state,
+        chromaAnalysis: action.analysis,
+        chromaPreview: null,
+        roi: action.analysis.roi,
+        renderResult: null,
+        status: "idle",
+        message: `已识别绿幕，覆盖率 ${Math.round(action.analysis.green_coverage * 100)}%。`,
+      };
+    case "setChromaPreview":
+      return {
+        ...state,
+        chromaPreview: action.preview,
+        status: "idle",
+        message: `预览已生成，绿幕覆盖率 ${Math.round(action.preview.metrics.green_coverage * 100)}%。`,
+      };
     case "setAnalysis":
       const initialQuad = action.analysis.candidates[0]?.quad ?? null;
       return {
@@ -132,17 +180,27 @@ export function canAnalyze(state: AppState): boolean {
   return Boolean(state.backendUrl && state.sourcePath && state.replacementPath);
 }
 
+export function canPreview(state: AppState): boolean {
+  return Boolean(state.backendUrl && state.sourcePath && state.replacementPath && state.chromaAnalysis);
+}
+
 export function canTrack(state: AppState): boolean {
   return Boolean(state.sourcePath && state.baseQuad);
 }
 
 export function canRender(state: AppState): boolean {
+  if (state.chromaAnalysis) {
+    return Boolean(state.backendUrl && state.sourcePath && state.replacementPath && state.roi);
+  }
   return Boolean(state.sourcePath && state.replacementPath && state.baseQuad && state.tracking);
 }
 
 function resetPipeline(state: AppState): AppState {
   return {
     ...state,
+    chromaAnalysis: null,
+    chromaPreview: null,
+    roi: null,
     analysis: null,
     baseQuad: null,
     confirmedQuad: null,

@@ -2,9 +2,12 @@ import type {
   AiCalibrationMode,
   AnalyzeResult,
   AudioPolicy,
+  ChromaAnalyzeResult,
+  ChromaPreviewResult,
   FitMode,
   FramePreview,
   Quad,
+  Rect,
   RenderResult,
   TrackingKeyframe,
   TrackingResult,
@@ -50,6 +53,52 @@ export async function analyzeTarget(payload: AnalyzePayload, fetcher: typeof fet
     {
       video_path: payload.videoPath,
       prompt: "手动框选替换区域",
+    },
+    fetcher,
+  );
+}
+
+export async function analyzeChroma(
+  payload: {
+    backendUrl: string;
+    sourcePath: string;
+    roi?: Rect | null;
+  },
+  fetcher: typeof fetch = fetch,
+): Promise<ChromaAnalyzeResult> {
+  return postJson<ChromaAnalyzeResult>(
+    `${trimUrl(payload.backendUrl)}/chroma/analyze`,
+    {
+      source_path: payload.sourcePath,
+      roi: payload.roi ?? undefined,
+    },
+    fetcher,
+  );
+}
+
+export async function previewChroma(
+  payload: {
+    backendUrl: string;
+    sourcePath: string;
+    replacementPath: string;
+    time: number;
+    roi?: Rect | null;
+    fitMode: FitMode;
+    feather: number;
+    maskGrow: number;
+  },
+  fetcher: typeof fetch = fetch,
+): Promise<ChromaPreviewResult> {
+  return postJson<ChromaPreviewResult>(
+    `${trimUrl(payload.backendUrl)}/chroma/preview`,
+    {
+      source_path: payload.sourcePath,
+      replacement_path: payload.replacementPath,
+      time: payload.time,
+      roi: payload.roi ?? undefined,
+      fit_mode: payload.fitMode,
+      feather: payload.feather,
+      mask_grow: payload.maskGrow,
     },
     fetcher,
   );
@@ -137,6 +186,36 @@ export async function renderReplacement(
       output_path: payload.outputPath || undefined,
       audio_policy: payload.audioPolicy,
       fit_mode: payload.fitMode,
+    },
+    fetcher,
+  );
+}
+
+export async function renderChromaReplacement(
+  backendUrl: string,
+  payload: {
+    sourcePath: string;
+    replacementPath: string;
+    outputPath?: string;
+    roi?: Rect | null;
+    audioPolicy: AudioPolicy;
+    fitMode: FitMode;
+    feather: number;
+    maskGrow: number;
+  },
+  fetcher: typeof fetch = fetch,
+): Promise<RenderResult> {
+  return postJson<RenderResult>(
+    `${trimUrl(backendUrl)}/chroma/render`,
+    {
+      source_path: payload.sourcePath,
+      replacement_path: payload.replacementPath,
+      output_path: payload.outputPath || undefined,
+      roi: payload.roi ?? undefined,
+      audio_policy: payload.audioPolicy,
+      fit_mode: payload.fitMode,
+      feather: payload.feather,
+      mask_grow: payload.maskGrow,
     },
     fetcher,
   );

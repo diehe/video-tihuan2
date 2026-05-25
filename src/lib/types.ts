@@ -3,6 +3,13 @@ export type Quad = [Point, Point, Point, Point];
 export type AudioPolicy = "original" | "replacement" | "silent";
 export type FitMode = "stretch" | "cover" | "contain";
 
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface FramePreview {
   width: number;
   height: number;
@@ -25,6 +32,21 @@ export interface Candidate {
 export interface AnalyzeResult {
   frame: FramePreview;
   candidates: Candidate[];
+}
+
+export interface ChromaFrameMetrics {
+  roi: Rect;
+  screen_quad: Quad | null;
+  green_coverage: number;
+}
+
+export interface ChromaAnalyzeResult extends ChromaFrameMetrics {
+  frame: FramePreview;
+  mask_image: string;
+}
+
+export interface ChromaPreviewResult extends FramePreview {
+  metrics: ChromaFrameMetrics;
 }
 
 export interface TrackedFrame {
