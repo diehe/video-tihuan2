@@ -3,6 +3,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+import engine.pipeline as pipeline
 from engine.pipeline import (
     _composite_frame,
     _chat_completions_endpoint,
@@ -60,6 +61,34 @@ def _write_replacement_video(path: Path, frames: int = 18) -> None:
         cv2.circle(frame, (12 + index * 3 % 72, 32), 10, (255, 255, 255), -1)
         writer.write(frame)
     writer.release()
+
+
+def _write_chroma_source_with_distractor(path: Path, frames: int = 12) -> list[Quad]:
+    writer = cv2.VideoWriter(
+        str(path),
+        cv2.VideoWriter_fourcc(*"mp4v"),
+        12,
+        (220, 160),
+    )
+    quads: list[Quad] = []
+    for index in range(frames):
+        offset = index
+        quad: Quad = [
+            [72 + offset, 34],
+            [146 + offset, 30],
+            [152 + offset, 126],
+            [66 + offset, 130],
+        ]
+        quads.append(quad)
+        frame = np.zeros((160, 220, 3), dtype=np.uint8)
+        frame[:, :] = (36, 38, 42)
+        cv2.rectangle(frame, (8, 10), (42, 58), (0, 245, 0), -1)
+        cv2.putText(frame, "BG", (10, 42), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (20, 20, 20), 1)
+        cv2.fillConvexPoly(frame, np.array(quad, dtype=np.int32), (0, 245, 0))
+        cv2.polylines(frame, [np.array(quad, dtype=np.int32)], True, (8, 8, 8), 4)
+        writer.write(frame)
+    writer.release()
+    return quads
 
 
 def _write_video_with_bright_distractor(path: Path, frames: int = 18) -> list[Quad]:
@@ -695,6 +724,71 @@ def test_keyframe_auth_headers_are_optional_for_local_models() -> None:
         "-H",
         "Content-Type: application/json",
     ]
+
+
+def test_chroma_analyze_respects_roi(tmp_path: Path) -> None:
+    source = tmp_path / "source.mp4"
+    expected_quads = _write_chroma_source_with_distractor(source)
+
+    result = pipeline.analyze_chroma_screen(
+        str(source),
+        roi={"x": 54, "y": 22, "width": 128, "height": 126},
+    )
+
+    expected_x, expected_y = _quad_center(expected_quads[0])
+    actual_x, actual_y = _quad_center(result.screen_quad)
+    assert abs(actual_x - expected_x) < 8
+    assert abs(actual_y - expected_y) < 8
+    assert result.green_coverage > 0.2
+    assert result.roi == {"x": 54, "y": 22, "width": 128, "height": 126}
+
+
+def test_compose_chroma_frame_only_replaces_green_pixels_inside_roi() -> None:
+    source = np.zeros((120, 180, 3), dtype=np.uint8)
+    source[:, :] = (32, 34, 38)
+    cv2.rectangle(source, (8, 8), (42, 42), (0, 245, 0), -1)
+    cv2.rectangle(source, (72, 24), (136, 96), (0, 245, 0), -1)
+    cv2.rectangle(source, (68, 20), (140, 100), (5, 5, 5), 3)
+    replacement = np.zeros((64, 64, 3), dtype=np.uint8)
+    replacement[:, :] = (20, 20, 230)
+
+    composed, metrics = pipeline.compose_chroma_frame(
+        source,
+        replacement,
+        roi={"x": 58, "y": 14, "width": 92, "height": 96},
+        fit_mode="cover",
+        feather=0,
+        mask_grow=0,
+    )
+
+    assert composed[60, 100, 2] > 160
+    assert composed[60, 100, 1] < 90
+    assert composed[24, 68, 2] < 40
+    assert composed[20, 20, 1] > 180
+    assert metrics.green_coverage > 0.2
+
+
+def test_render_chroma_replacement_writes_video(tmp_path: Path) -> None:
+    source = tmp_path / "source.mp4"
+    replacement = tmp_path / "replacement.mp4"
+    output = tmp_path / "output.mp4"
+    _write_chroma_source_with_distractor(source, frames=6)
+    _write_replacement_video(replacement, frames=3)
+
+    result = pipeline.render_chroma_replacement(
+        source_path=str(source),
+        replacement_path=str(replacement),
+        output_path=str(output),
+        roi={"x": 54, "y": 22, "width": 128, "height": 126},
+        audio_policy="silent",
+        fit_mode="cover",
+        feather=1,
+        mask_grow=0,
+    )
+
+    assert output.exists()
+    assert result.frame_count == 6
+    assert result.duration > 0
 
 
 def test_green_screen_composite_covers_threshold_edge_pixels() -> None:

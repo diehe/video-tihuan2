@@ -72,3 +72,14 @@ class RenderResult(BaseModel):
     frame_count: int
     duration: float
     audio_policy: AudioPolicy
+
+
+class ChromaFrameMetrics(BaseModel):
+    roi: dict[str, int]
+    screen_quad: Quad | None = None
+    green_coverage: float = 0
+
+
+class ChromaAnalyzeResult(ChromaFrameMetrics):
+    frame: FramePreview
+    mask_image: str

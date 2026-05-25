@@ -19,6 +19,8 @@ from .schemas import (
     AnalyzeResult,
     AudioPolicy,
     Candidate,
+    ChromaAnalyzeResult,
+    ChromaFrameMetrics,
     FramePreview,
     Quad,
     RenderResult,
@@ -320,6 +322,124 @@ def render_replacement(
                 break
             replacement_frame = replacement_frames[written % len(replacement_frames)]
             composed = _composite_frame(source_frame, replacement_frame, _quad_array(frame_data.quad), fit_mode)
+            writer.write(composed)
+            written += 1
+
+        writer.release()
+        source.release()
+        replacement.release()
+
+        if audio_policy == AudioPolicy.SILENT:
+            shutil.copyfile(temp_video, output)
+        else:
+            audio_source = source_path if audio_policy == AudioPolicy.ORIGINAL else replacement_path
+            if not _mux_audio(temp_video, audio_source, output):
+                shutil.copyfile(temp_video, output)
+
+    return RenderResult(
+        output_path=str(output),
+        frame_count=written,
+        duration=written / fps if fps else 0,
+        audio_policy=audio_policy,
+    )
+
+
+def analyze_chroma_screen(video_path: str, roi: dict[str, int] | None = None) -> ChromaAnalyzeResult:
+    frame, fps, frame_count = _read_first_frame(video_path)
+    height, width = frame.shape[:2]
+    normalized_roi = _normalize_roi(roi, width, height)
+    mask = _chroma_mask(frame, normalized_roi)
+    quad = _chroma_quad_from_mask(mask)
+    return ChromaAnalyzeResult(
+        frame=FramePreview(
+            width=width,
+            height=height,
+            fps=fps,
+            frame_count=frame_count,
+            duration=frame_count / fps if fps else 0,
+            image=_encode_frame(frame),
+        ),
+        mask_image=_encode_frame(_mask_preview(frame, mask)),
+        roi=normalized_roi,
+        screen_quad=_quad_list(quad) if quad is not None else None,
+        green_coverage=_mask_coverage(mask, normalized_roi),
+    )
+
+
+def compose_chroma_frame(
+    source: np.ndarray,
+    replacement: np.ndarray,
+    roi: dict[str, int] | None = None,
+    fit_mode: str = "cover",
+    feather: int = 3,
+    mask_grow: int = -1,
+) -> tuple[np.ndarray, ChromaFrameMetrics]:
+    height, width = source.shape[:2]
+    normalized_roi = _normalize_roi(roi, width, height)
+    raw_mask = _chroma_mask(source, normalized_roi)
+    quad = _chroma_quad_from_mask(raw_mask)
+    metrics = ChromaFrameMetrics(
+        roi=normalized_roi,
+        screen_quad=_quad_list(quad) if quad is not None else None,
+        green_coverage=_mask_coverage(raw_mask, normalized_roi),
+    )
+    if quad is None:
+        return source.copy(), metrics
+
+    mask = _adjust_chroma_mask(raw_mask, feather=feather, mask_grow=mask_grow)
+    warped = _warp_replacement_to_quad(replacement, quad, width, height, fit_mode)
+    alpha = (mask.astype(np.float32) / 255.0)[:, :, None]
+    composed = source.astype(np.float32) * (1 - alpha) + warped.astype(np.float32) * alpha
+    return np.clip(composed, 0, 255).astype(np.uint8), metrics
+
+
+def render_chroma_replacement(
+    source_path: str,
+    replacement_path: str,
+    output_path: str,
+    roi: dict[str, int] | None = None,
+    audio_policy: AudioPolicy = AudioPolicy.ORIGINAL,
+    fit_mode: str = "cover",
+    feather: int = 3,
+    mask_grow: int = -1,
+) -> RenderResult:
+    source = _open_capture(source_path)
+    replacement = _open_capture(replacement_path)
+    fps = source.get(cv2.CAP_PROP_FPS) or 24.0
+    width = int(source.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(source.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix="video-tihuan-chroma-") as temp_dir:
+        temp_video = Path(temp_dir) / "video_only.mp4"
+        writer = cv2.VideoWriter(
+            str(temp_video),
+            cv2.VideoWriter_fourcc(*"mp4v"),
+            fps,
+            (width, height),
+        )
+        if not writer.isOpened():
+            raise EngineError("无法创建导出视频")
+
+        replacement_frames = _load_replacement_frames(replacement)
+        if not replacement_frames:
+            raise EngineError(f"无法读取替换视频: {replacement_path}")
+
+        written = 0
+        while True:
+            ok, source_frame = source.read()
+            if not ok:
+                break
+            replacement_frame = replacement_frames[written % len(replacement_frames)]
+            composed, _ = compose_chroma_frame(
+                source_frame,
+                replacement_frame,
+                roi=roi,
+                fit_mode=fit_mode,
+                feather=feather,
+                mask_grow=mask_grow,
+            )
             writer.write(composed)
             written += 1
 
@@ -1286,6 +1406,91 @@ def _fit_frame(frame: np.ndarray, target_w: int, target_h: int, fit_mode: str) -
     y = max(0, (resized.shape[0] - target_h) // 2)
     x = max(0, (resized.shape[1] - target_w) // 2)
     return resized[y : y + target_h, x : x + target_w]
+
+
+def _normalize_roi(roi: dict[str, int] | None, width: int, height: int) -> dict[str, int]:
+    if not roi:
+        return {"x": 0, "y": 0, "width": width, "height": height}
+
+    x = int(round(float(roi.get("x", 0))))
+    y = int(round(float(roi.get("y", 0))))
+    w = int(round(float(roi.get("width", width))))
+    h = int(round(float(roi.get("height", height))))
+    x = max(0, min(x, width - 1))
+    y = max(0, min(y, height - 1))
+    x1 = max(x + 1, min(width, x + max(1, w)))
+    y1 = max(y + 1, min(height, y + max(1, h)))
+    return {"x": x, "y": y, "width": x1 - x, "height": y1 - y}
+
+
+def _chroma_mask(frame: np.ndarray, roi: dict[str, int]) -> np.ndarray:
+    mask = _green_mask(frame)
+    constrained = np.zeros(mask.shape, dtype=np.uint8)
+    x, y, w, h = roi["x"], roi["y"], roi["width"], roi["height"]
+    constrained[y : y + h, x : x + w] = mask[y : y + h, x : x + w]
+    return constrained
+
+
+def _chroma_quad_from_mask(mask: np.ndarray) -> np.ndarray | None:
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+
+    best = max(contours, key=cv2.contourArea)
+    if cv2.contourArea(best) < 25:
+        return None
+    return _contour_quad(best)
+
+
+def _adjust_chroma_mask(mask: np.ndarray, feather: int, mask_grow: int) -> np.ndarray:
+    adjusted = mask.copy()
+    if mask_grow != 0:
+        kernel_size = max(1, abs(int(mask_grow)) * 2 + 1)
+        kernel = np.ones((kernel_size, kernel_size), dtype=np.uint8)
+        if mask_grow > 0:
+            adjusted = cv2.dilate(adjusted, kernel, iterations=1)
+        else:
+            adjusted = cv2.erode(adjusted, kernel, iterations=1)
+
+    if feather > 0:
+        radius = max(1, int(feather))
+        kernel_size = radius * 2 + 1
+        adjusted = cv2.GaussianBlur(adjusted, (kernel_size, kernel_size), 0)
+    return adjusted
+
+
+def _warp_replacement_to_quad(
+    replacement: np.ndarray,
+    quad: np.ndarray,
+    width: int,
+    height: int,
+    fit_mode: str,
+) -> np.ndarray:
+    target_w = max(2, int(max(np.linalg.norm(quad[1] - quad[0]), np.linalg.norm(quad[2] - quad[3]))))
+    target_h = max(2, int(max(np.linalg.norm(quad[3] - quad[0]), np.linalg.norm(quad[2] - quad[1]))))
+    fitted = _fit_frame(replacement, target_w, target_h, fit_mode)
+    src_quad = np.array(
+        [[0, 0], [target_w - 1, 0], [target_w - 1, target_h - 1], [0, target_h - 1]],
+        dtype=np.float32,
+    )
+    matrix = cv2.getPerspectiveTransform(src_quad, quad.astype(np.float32))
+    return cv2.warpPerspective(fitted, matrix, (width, height), borderMode=cv2.BORDER_REPLICATE)
+
+
+def _mask_coverage(mask: np.ndarray, roi: dict[str, int]) -> float:
+    x, y, w, h = roi["x"], roi["y"], roi["width"], roi["height"]
+    area = max(1, w * h)
+    return cv2.countNonZero(mask[y : y + h, x : x + w]) / area
+
+
+def _mask_preview(frame: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    preview = frame.copy()
+    green_layer = np.zeros_like(preview)
+    green_layer[:, :] = (40, 230, 80)
+    alpha = (mask.astype(np.float32) / 255.0)[:, :, None] * 0.55
+    return np.clip(preview.astype(np.float32) * (1 - alpha) + green_layer.astype(np.float32) * alpha, 0, 255).astype(
+        np.uint8
+    )
 
 
 def _mux_audio(video_only: Path, audio_source: str, output: Path) -> bool:
