@@ -108,19 +108,31 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           TAG: ${{ inputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t files < <(find release-assets -type f | sort)
+          mkdir -p release-upload
+          mac_file="$(find release-assets -type f -name '*.dmg' | sort | head -n 1)"
+          windows_file="$(find release-assets -type f -name '*.exe' | sort | head -n 1)"
+          if [[ -z "$mac_file" || -z "$windows_file" ]]; then
+            echo "Missing release assets" >&2
+            find release-assets -type f | sort >&2
+            exit 1
+          fi
+
+          cp "$mac_file" release-upload/video-tihuan-macos-aarch64.dmg
+          cp "$windows_file" release-upload/video-tihuan-windows-x64-setup.exe
+          mapfile -t files < <(find release-upload -type f | sort)
           if [[ "${#files[@]}" -eq 0 ]]; then
             echo "No release assets found" >&2
             exit 1
           fi
 
           notes=$'包含 macOS 和 Windows 桌面安装包。\n\nmacOS 首次打开如遇到系统安全提示，请在系统设置中允许打开。'
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "${files[@]}" --clobber
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${files[@]}" --repo "$REPO" --clobber
           else
-            gh release create "$TAG" "${files[@]}" --title "绿幕视频替换 ${TAG}" --notes "$notes"
+            gh release create "$TAG" "${files[@]}" --repo "$REPO" --title "绿幕视频替换 ${TAG}" --notes "$notes"
           fi
