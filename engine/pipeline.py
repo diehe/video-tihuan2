@@ -21,6 +21,7 @@ from .schemas import (
     Candidate,
     ChromaAnalyzeResult,
     ChromaFrameMetrics,
+    ChromaPreviewResult,
     FramePreview,
     Quad,
     RenderResult,
@@ -391,6 +392,57 @@ def compose_chroma_frame(
     alpha = (mask.astype(np.float32) / 255.0)[:, :, None]
     composed = source.astype(np.float32) * (1 - alpha) + warped.astype(np.float32) * alpha
     return np.clip(composed, 0, 255).astype(np.uint8), metrics
+
+
+def preview_chroma_replacement(
+    source_path: str,
+    replacement_path: str,
+    time_seconds: float = 0,
+    roi: dict[str, int] | None = None,
+    fit_mode: str = "cover",
+    feather: int = 3,
+    mask_grow: int = -1,
+) -> ChromaPreviewResult:
+    source = _open_capture(source_path)
+    replacement = _open_capture(replacement_path)
+    source_fps = source.get(cv2.CAP_PROP_FPS) or 24.0
+    source_frame_count = int(source.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    index = max(0, int(round(max(0.0, time_seconds) * source_fps)))
+    if source_frame_count:
+        index = min(index, source_frame_count - 1)
+    source.set(cv2.CAP_PROP_POS_FRAMES, index)
+    ok, source_frame = source.read()
+    if not ok:
+        source.release()
+        replacement.release()
+        raise EngineError(f"无法读取指定时间的帧: {time_seconds:.2f}s")
+
+    replacement_frames = _load_replacement_frames(replacement)
+    source.release()
+    replacement.release()
+    if not replacement_frames:
+        raise EngineError(f"无法读取替换视频: {replacement_path}")
+
+    composed, metrics = compose_chroma_frame(
+        source_frame,
+        replacement_frames[index % len(replacement_frames)],
+        roi=roi,
+        fit_mode=fit_mode,
+        feather=feather,
+        mask_grow=mask_grow,
+    )
+    height, width = composed.shape[:2]
+    return ChromaPreviewResult(
+        width=width,
+        height=height,
+        fps=source_fps,
+        frame_count=source_frame_count,
+        duration=source_frame_count / source_fps if source_fps else 0,
+        image=_encode_frame(composed),
+        index=index,
+        time=index / source_fps if source_fps else 0,
+        metrics=metrics,
+    )
 
 
 def render_chroma_replacement(

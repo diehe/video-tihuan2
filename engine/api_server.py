@@ -8,8 +8,28 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .file_dialog import select_local_path as _select_local_path
-from .pipeline import EngineError, analyze_target, generate_ai_keyframes, read_frame_preview, render_replacement, track_region
-from .schemas import AnalyzeResult, AudioPolicy, FramePreview, Quad, RenderResult, TrackingKeyframe, TrackingResult
+from .pipeline import (
+    EngineError,
+    analyze_chroma_screen,
+    analyze_target,
+    generate_ai_keyframes,
+    preview_chroma_replacement,
+    read_frame_preview,
+    render_chroma_replacement,
+    render_replacement,
+    track_region,
+)
+from .schemas import (
+    AnalyzeResult,
+    AudioPolicy,
+    ChromaAnalyzeResult,
+    ChromaPreviewResult,
+    FramePreview,
+    Quad,
+    RenderResult,
+    TrackingKeyframe,
+    TrackingResult,
+)
 
 app = FastAPI(title="Video Tihuan Engine", version="0.1.0")
 app.add_middleware(
@@ -57,6 +77,32 @@ class RenderRequest(BaseModel):
     output_path: str | None = None
     audio_policy: AudioPolicy = AudioPolicy.ORIGINAL
     fit_mode: str = "stretch"
+
+
+class ChromaAnalyzeRequest(BaseModel):
+    source_path: str
+    roi: dict[str, int] | None = None
+
+
+class ChromaPreviewRequest(BaseModel):
+    source_path: str
+    replacement_path: str
+    time: float = 0
+    roi: dict[str, int] | None = None
+    fit_mode: str = "cover"
+    feather: int = 3
+    mask_grow: int = -1
+
+
+class ChromaRenderRequest(BaseModel):
+    source_path: str
+    replacement_path: str
+    output_path: str | None = None
+    roi: dict[str, int] | None = None
+    audio_policy: AudioPolicy = AudioPolicy.ORIGINAL
+    fit_mode: str = "cover"
+    feather: int = 3
+    mask_grow: int = -1
 
 
 class SelectPathResult(BaseModel):
@@ -130,6 +176,45 @@ def render(request: RenderRequest) -> RenderResult:
             output_path=output_path,
             audio_policy=request.audio_policy,
             fit_mode=request.fit_mode,
+        )
+    )
+
+
+@app.post("/chroma/analyze", response_model=ChromaAnalyzeResult)
+def chroma_analyze(request: ChromaAnalyzeRequest) -> ChromaAnalyzeResult:
+    return _guard(lambda: analyze_chroma_screen(request.source_path, roi=request.roi))
+
+
+@app.post("/chroma/preview", response_model=ChromaPreviewResult)
+def chroma_preview(request: ChromaPreviewRequest) -> ChromaPreviewResult:
+    return _guard(
+        lambda: preview_chroma_replacement(
+            source_path=request.source_path,
+            replacement_path=request.replacement_path,
+            time_seconds=request.time,
+            roi=request.roi,
+            fit_mode=request.fit_mode,
+            feather=request.feather,
+            mask_grow=request.mask_grow,
+        )
+    )
+
+
+@app.post("/chroma/render", response_model=RenderResult)
+def chroma_render(request: ChromaRenderRequest) -> RenderResult:
+    output_path = request.output_path
+    if not output_path:
+        output_path = str(Path(request.source_path).with_name("video-tihuan-chroma-output.mp4"))
+    return _guard(
+        lambda: render_chroma_replacement(
+            source_path=request.source_path,
+            replacement_path=request.replacement_path,
+            output_path=output_path,
+            roi=request.roi,
+            audio_policy=request.audio_policy,
+            fit_mode=request.fit_mode,
+            feather=request.feather,
+            mask_grow=request.mask_grow,
         )
     )
 

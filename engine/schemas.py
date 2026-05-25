@@ -83,3 +83,7 @@ class ChromaFrameMetrics(BaseModel):
 class ChromaAnalyzeResult(ChromaFrameMetrics):
     frame: FramePreview
     mask_image: str
+
+
+class ChromaPreviewResult(FramePreview):
+    metrics: ChromaFrameMetrics

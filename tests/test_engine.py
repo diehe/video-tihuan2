@@ -2,7 +2,9 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from fastapi.testclient import TestClient
 
+import engine.api_server as api_server
 import engine.pipeline as pipeline
 from engine.pipeline import (
     _composite_frame,
@@ -789,6 +791,61 @@ def test_render_chroma_replacement_writes_video(tmp_path: Path) -> None:
     assert output.exists()
     assert result.frame_count == 6
     assert result.duration > 0
+
+
+def test_chroma_api_analyze_preview_and_render(tmp_path: Path) -> None:
+    source = tmp_path / "source.mp4"
+    replacement = tmp_path / "replacement.mp4"
+    output = tmp_path / "api-output.mp4"
+    _write_chroma_source_with_distractor(source, frames=6)
+    _write_replacement_video(replacement, frames=3)
+    client = TestClient(api_server.app)
+    roi = {"x": 54, "y": 22, "width": 128, "height": 126}
+
+    analyze_response = client.post("/chroma/analyze", json={"source_path": str(source), "roi": roi})
+
+    assert analyze_response.status_code == 200
+    analyze_data = analyze_response.json()
+    assert analyze_data["roi"] == roi
+    assert analyze_data["screen_quad"]
+    assert analyze_data["green_coverage"] > 0.2
+
+    preview_response = client.post(
+        "/chroma/preview",
+        json={
+            "source_path": str(source),
+            "replacement_path": str(replacement),
+            "time": 0,
+            "roi": roi,
+            "fit_mode": "cover",
+            "feather": 0,
+            "mask_grow": 0,
+        },
+    )
+
+    assert preview_response.status_code == 200
+    preview_data = preview_response.json()
+    assert preview_data["image"].startswith("data:image/jpeg;base64,")
+    assert preview_data["metrics"]["green_coverage"] > 0.2
+
+    render_response = client.post(
+        "/chroma/render",
+        json={
+            "source_path": str(source),
+            "replacement_path": str(replacement),
+            "output_path": str(output),
+            "roi": roi,
+            "audio_policy": "silent",
+            "fit_mode": "cover",
+            "feather": 1,
+            "mask_grow": 0,
+        },
+    )
+
+    assert render_response.status_code == 200
+    render_data = render_response.json()
+    assert render_data["frame_count"] == 6
+    assert output.exists()
 
 
 def test_green_screen_composite_covers_threshold_edge_pixels() -> None:

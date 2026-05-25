@@ -10,7 +10,17 @@ from urllib.parse import parse_qs, urlparse
 from pydantic import BaseModel
 
 from .file_dialog import select_local_path
-from .pipeline import EngineError, analyze_target, generate_ai_keyframes, read_frame_preview, render_replacement, track_region
+from .pipeline import (
+    EngineError,
+    analyze_chroma_screen,
+    analyze_target,
+    generate_ai_keyframes,
+    preview_chroma_replacement,
+    read_frame_preview,
+    render_chroma_replacement,
+    render_replacement,
+    track_region,
+)
 from .schemas import AudioPolicy, TrackingResult
 
 
@@ -21,6 +31,17 @@ class RenderRequest(BaseModel):
     output_path: str | None = None
     audio_policy: AudioPolicy = AudioPolicy.ORIGINAL
     fit_mode: str = "stretch"
+
+
+class ChromaRenderRequest(BaseModel):
+    source_path: str
+    replacement_path: str
+    output_path: str | None = None
+    roi: dict[str, int] | None = None
+    audio_policy: AudioPolicy = AudioPolicy.ORIGINAL
+    fit_mode: str = "cover"
+    feather: int = 3
+    mask_grow: int = -1
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -84,6 +105,40 @@ class Handler(BaseHTTPRequestHandler):
                     output_path=output_path,
                     audio_policy=request.audio_policy,
                     fit_mode=request.fit_mode,
+                )
+            )
+            return
+        if parsed.path == "/chroma/analyze":
+            self._guard(lambda: analyze_chroma_screen(payload["source_path"], roi=payload.get("roi")))
+            return
+        if parsed.path == "/chroma/preview":
+            self._guard(
+                lambda: preview_chroma_replacement(
+                    source_path=payload["source_path"],
+                    replacement_path=payload["replacement_path"],
+                    time_seconds=float(payload.get("time", 0)),
+                    roi=payload.get("roi"),
+                    fit_mode=payload.get("fit_mode", "cover"),
+                    feather=int(payload.get("feather", 3)),
+                    mask_grow=int(payload.get("mask_grow", -1)),
+                )
+            )
+            return
+        if parsed.path == "/chroma/render":
+            request = ChromaRenderRequest.model_validate(payload)
+            output_path = request.output_path or str(
+                Path(request.source_path).with_name("video-tihuan-chroma-output.mp4")
+            )
+            self._guard(
+                lambda: render_chroma_replacement(
+                    source_path=request.source_path,
+                    replacement_path=request.replacement_path,
+                    output_path=output_path,
+                    roi=request.roi,
+                    audio_policy=request.audio_policy,
+                    fit_mode=request.fit_mode,
+                    feather=request.feather,
+                    mask_grow=request.mask_grow,
                 )
             )
             return
