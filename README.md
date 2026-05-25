@@ -52,7 +52,7 @@ PyInstaller 后端 sidecar、OpenCV wheel 都是平台相关产物。仓库内
 2. 打开 `Actions` -> `Release Desktop Apps`。
 3. 点击 `Run workflow`，输入版本号，例如 `v0.1.0`。
 4. 构建完成后，GitHub Releases 页面会生成同版本下载页，
-   里面包含 macOS `.dmg` 和 Windows `.exe/.msi` 安装包。
+   里面包含 macOS `.dmg` 和 Windows `.exe` 安装包。
 
 如果只想单独构建 Windows 包，可以运行 `Build Windows App` 工作流，
 构建完成后在 `windows-installers` artifact 中下载安装包。
@@ -62,5 +62,5 @@ FFmpeg 后运行：
 
 ```bash
 npm ci
-npm run package:app
+npm run package:app:windows
 ```

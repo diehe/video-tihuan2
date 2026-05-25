@@ -8,6 +8,8 @@
     "build": "tsc && vite build",
     "build:sidecar": "bash scripts/build-sidecar.sh",
     "package:app": "npm run build:sidecar && npm run tauri build",
+    "package:app:mac": "npm run build:sidecar && npm run tauri build -- --bundles dmg",
+    "package:app:windows": "npm run build:sidecar && npm run tauri build -- --bundles nsis",
     "test": "vitest run",
     "tauri": "tauri"
   },
