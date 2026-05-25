@@ -1,21 +1,27 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
+import shutil
 
 
 ROOT = Path.cwd()
 OPENSSL_LIB = Path("/opt/homebrew/opt/openssl@3/lib")
 EXTRA_DATAS = []
+EXTRA_BINARIES = []
 if (OPENSSL_LIB / "libssl.3.dylib").exists():
     EXTRA_DATAS.append((str((OPENSSL_LIB / "libssl.3.dylib").resolve()), "."))
 if (OPENSSL_LIB / "libcrypto.3.dylib").exists():
     EXTRA_DATAS.append((str((OPENSSL_LIB / "libcrypto.3.dylib").resolve()), "."))
 
+FFMPEG = shutil.which("ffmpeg")
+if FFMPEG:
+    EXTRA_BINARIES.append((FFMPEG, "."))
+
 
 a = Analysis(
     [str(ROOT / "engine" / "__main__.py")],
     pathex=[str(ROOT)],
-    binaries=[],
+    binaries=EXTRA_BINARIES,
     datas=EXTRA_DATAS,
     hiddenimports=["engine.simple_server", "engine.file_dialog", "engine.pipeline", "engine.schemas"],
     hookspath=[],

@@ -866,6 +866,16 @@ def test_mix_audio_uses_both_volume_controls(tmp_path: Path, monkeypatch) -> Non
     assert "apad[aout]" in filter_graph
 
 
+def test_ffmpeg_binary_prefers_bundled_pyinstaller_binary(tmp_path: Path, monkeypatch) -> None:
+    bundled = tmp_path / "ffmpeg"
+    bundled.write_text("fake ffmpeg")
+
+    monkeypatch.setattr(pipeline.sys, "_MEIPASS", str(tmp_path), raising=False)
+    monkeypatch.setattr(pipeline.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+
+    assert pipeline._ffmpeg_binary() == str(bundled)
+
+
 def test_chroma_api_analyze_preview_and_render(tmp_path: Path) -> None:
     source = tmp_path / "source.mp4"
     replacement = tmp_path / "replacement.mp4"

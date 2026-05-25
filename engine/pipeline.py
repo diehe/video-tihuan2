@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -1658,11 +1659,12 @@ def _mux_audio(video_only: Path, audio_source: str, output: Path) -> bool:
 
 
 def _mux_audio_with_volume(video_only: Path, audio_source: str, output: Path, volume: float) -> bool:
-    if not shutil.which("ffmpeg"):
+    ffmpeg = _ffmpeg_binary()
+    if not ffmpeg:
         return False
     volume_label = _format_audio_volume(volume)
     command = [
-        "ffmpeg",
+        ffmpeg,
         "-y",
         "-i",
         str(video_only),
@@ -1695,7 +1697,8 @@ def _mux_mixed_audio(
     source_volume: float,
     replacement_volume: float,
 ) -> bool:
-    if not shutil.which("ffmpeg"):
+    ffmpeg = _ffmpeg_binary()
+    if not ffmpeg:
         return False
     source_label = _format_audio_volume(source_volume)
     replacement_label = _format_audio_volume(replacement_volume)
@@ -1705,7 +1708,7 @@ def _mux_mixed_audio(
         "[a0][a1]amix=inputs=2:duration=longest:dropout_transition=0,apad[aout]"
     )
     command = [
-        "ffmpeg",
+        ffmpeg,
         "-y",
         "-i",
         str(video_only),
@@ -1734,6 +1737,14 @@ def _mux_mixed_audio(
 
 def _format_audio_volume(volume: float) -> str:
     return f"{max(0.0, float(volume)):.4g}"
+
+
+def _ffmpeg_binary() -> str | None:
+    bundled_root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    bundled = bundled_root / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
+    if bundled.exists():
+        return str(bundled)
+    return shutil.which("ffmpeg")
 
 
 def _parse_json_object(content: str) -> dict[str, Any]:

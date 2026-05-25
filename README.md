@@ -10,7 +10,7 @@
 - 自动识别绿幕区域，并支持拖动限定手机区域，避免误扣其他绿色物体。
 - 预览主体首帧、绿色 mask 和合成效果。
 - 支持填满裁剪、拉伸填满、完整留边三种画面适配。
-- 支持保留主体音频、使用替换视频音频或静音导出。
+- 支持分别调节主体视频和手机替换视频音量，并在导出时自动混音。
 
 ## 本地开发
 
@@ -31,9 +31,13 @@ npm run build
 
 ## 桌面打包说明
 
-Tauri 桌面构建需要安装 Rust 工具链。Python 引擎需要先打成 sidecar 二进制并放到 `sidecars/` 目录：
+Tauri 桌面构建需要安装 Rust 工具链。打包命令会先用 PyInstaller
+把 Python/OpenCV 后端引擎打成 sidecar，再由 Tauri 生成桌面 App：
 
 ```bash
-./scripts/build-sidecar.sh
-npm run tauri build
+npm run package:app
 ```
+
+打包产物在 `src-tauri/target/release/bundle/`。构建机需要安装
+FFmpeg；脚本会把 `ffmpeg` 一起放入后端 sidecar，用户安装 App 后
+不需要单独安装 Python、Node、FFmpeg 或手动启动后端服务。

@@ -3,6 +3,12 @@ set -euo pipefail
 
 mkdir -p sidecars
 
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  echo "ffmpeg is required to build the packaged app with audio support." >&2
+  echo "Install ffmpeg on the build machine, then run this script again." >&2
+  exit 1
+fi
+
 if [[ -z "${PYTHON:-}" ]]; then
   if [[ "$(uname -s)" == "Darwin" && -x "/opt/homebrew/bin/python3.12" ]]; then
     PYTHON="/opt/homebrew/bin/python3.12"
