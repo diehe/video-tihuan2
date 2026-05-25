@@ -76,4 +76,25 @@ describe("workflow reducer", () => {
     expect(state.chromaAnalysis).toBeNull();
     expect(state.chromaPreview).toBeNull();
   });
+
+  it("keeps the analyzed frame available while the ROI is adjusted", () => {
+    let state = appReducer(initialState, { type: "setSourcePath", path: "/tmp/source.mp4" });
+    state = appReducer(state, { type: "setReplacementPath", path: "/tmp/replacement.mp4" });
+    state = appReducer(state, {
+      type: "setChromaAnalysis",
+      analysis: {
+        frame: { width: 160, height: 120, fps: 24, frame_count: 24, duration: 1, image: "", index: 0, time: 0 },
+        mask_image: "",
+        roi: { x: 0, y: 0, width: 160, height: 120 },
+        screen_quad: null,
+        green_coverage: 0.45,
+      },
+    });
+
+    state = appReducer(state, { type: "setRoi", roi: { x: 30, y: 20, width: 80, height: 70 } });
+
+    expect(state.roi).toEqual({ x: 30, y: 20, width: 80, height: 70 });
+    expect(state.chromaAnalysis?.frame.width).toBe(160);
+    expect(canPreview(state)).toBe(true);
+  });
 });

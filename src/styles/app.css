@@ -296,6 +296,40 @@ button:disabled {
   font-weight: 900;
 }
 
+.roi-handle {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  background: #fffbea;
+  border: 3px solid #94f36a;
+  border-radius: 999px;
+  box-shadow: 0 8px 18px rgba(10, 28, 10, 0.28);
+}
+
+.roi-handle.nw {
+  top: -10px;
+  left: -10px;
+  cursor: nwse-resize;
+}
+
+.roi-handle.ne {
+  top: -10px;
+  right: -10px;
+  cursor: nesw-resize;
+}
+
+.roi-handle.se {
+  right: -10px;
+  bottom: -10px;
+  cursor: nwse-resize;
+}
+
+.roi-handle.sw {
+  bottom: -10px;
+  left: -10px;
+  cursor: nesw-resize;
+}
+
 .status {
   padding: 16px;
   background: rgba(255, 255, 247, 0.1);

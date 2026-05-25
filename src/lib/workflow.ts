@@ -110,7 +110,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "setMaskGrow":
       return { ...state, maskGrow: action.maskGrow, chromaPreview: null, renderResult: null };
     case "setRoi":
-      return { ...state, roi: action.roi, chromaAnalysis: null, chromaPreview: null, renderResult: null };
+      return { ...state, roi: action.roi, chromaPreview: null, renderResult: null };
     case "setStatus":
       return { ...state, status: action.status, message: action.message };
     case "setChromaAnalysis":

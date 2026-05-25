@@ -62,6 +62,7 @@ describe("App chroma-key wizard", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /识别绿幕/ }));
     await screen.findByText(/已识别绿幕/);
+    expect(screen.getAllByLabelText(/缩放限定区域/)).toHaveLength(4);
     expect(analyzeChroma).toHaveBeenCalledWith(
       expect.objectContaining({
         sourcePath: "/tmp/source.mp4",

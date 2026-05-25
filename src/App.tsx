@@ -339,6 +339,8 @@ function RoiEditor({
     height: Math.round(frame.height * 0.7),
   };
   const [drag, setDrag] = useState<{
+    type: "move" | "resize";
+    corner?: "nw" | "ne" | "se" | "sw";
     pointerId: number;
     startX: number;
     startY: number;
@@ -354,14 +356,49 @@ function RoiEditor({
   }
 
   function clampRoi(next: Rect): Rect {
-    const x = Math.max(0, Math.min(frame.width - next.width, Math.round(next.x)));
-    const y = Math.max(0, Math.min(frame.height - next.height, Math.round(next.y)));
+    const width = Math.max(8, Math.min(frame.width, Math.round(next.width)));
+    const height = Math.max(8, Math.min(frame.height, Math.round(next.height)));
+    const x = Math.max(0, Math.min(frame.width - width, Math.round(next.x)));
+    const y = Math.max(0, Math.min(frame.height - height, Math.round(next.y)));
     return {
       x,
       y,
-      width: Math.max(8, Math.min(frame.width, Math.round(next.width))),
-      height: Math.max(8, Math.min(frame.height, Math.round(next.height))),
+      width,
+      height,
     };
+  }
+
+  function resizeRoi(startRoi: Rect, corner: NonNullable<typeof drag>["corner"], dx: number, dy: number): Rect {
+    if (corner === "nw") {
+      return clampRoi({
+        x: startRoi.x + dx,
+        y: startRoi.y + dy,
+        width: startRoi.width - dx,
+        height: startRoi.height - dy,
+      });
+    }
+    if (corner === "ne") {
+      return clampRoi({
+        x: startRoi.x,
+        y: startRoi.y + dy,
+        width: startRoi.width + dx,
+        height: startRoi.height - dy,
+      });
+    }
+    if (corner === "sw") {
+      return clampRoi({
+        x: startRoi.x + dx,
+        y: startRoi.y,
+        width: startRoi.width - dx,
+        height: startRoi.height + dy,
+      });
+    }
+    return clampRoi({
+      x: startRoi.x,
+      y: startRoi.y,
+      width: startRoi.width + dx,
+      height: startRoi.height + dy,
+    });
   }
 
   return (
@@ -370,13 +407,13 @@ function RoiEditor({
       onPointerMove={(event) => {
         if (!drag || drag.pointerId !== event.pointerId) return;
         const current = clientToFrame(event);
-        onChange(
-          clampRoi({
-            ...drag.startRoi,
-            x: drag.startRoi.x + current.x - drag.startX,
-            y: drag.startRoi.y + current.y - drag.startY,
-          }),
-        );
+        const dx = current.x - drag.startX;
+        const dy = current.y - drag.startY;
+        if (drag.type === "resize") {
+          onChange(resizeRoi(drag.startRoi, drag.corner, dx, dy));
+          return;
+        }
+        onChange(clampRoi({ ...drag.startRoi, x: drag.startRoi.x + dx, y: drag.startRoi.y + dy }));
       }}
       onPointerUp={(event) => {
         if (drag?.pointerId === event.pointerId) {
@@ -394,6 +431,7 @@ function RoiEditor({
           const point = clientToFrame(event);
           event.currentTarget.parentElement?.setPointerCapture(event.pointerId);
           setDrag({
+            type: "move",
             pointerId: event.pointerId,
             startX: point.x,
             startY: point.y,
@@ -409,6 +447,26 @@ function RoiEditor({
         type="button"
       >
         <span>限定手机区域</span>
+        {(["nw", "ne", "se", "sw"] as const).map((corner) => (
+          <i
+            aria-label={`缩放限定区域 ${corner}`}
+            className={`roi-handle ${corner}`}
+            key={corner}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              const point = clientToFrame(event);
+              event.currentTarget.closest(".roi-stage")?.setPointerCapture(event.pointerId);
+              setDrag({
+                type: "resize",
+                corner,
+                pointerId: event.pointerId,
+                startX: point.x,
+                startY: point.y,
+                startRoi: activeRoi,
+              });
+            }}
+          />
+        ))}
       </button>
     </div>
   );
