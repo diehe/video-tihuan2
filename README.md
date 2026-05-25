@@ -49,9 +49,13 @@ PyInstaller 后端 sidecar、OpenCV wheel 都是平台相关产物。仓库内
 已提供 GitHub Actions 工作流：
 
 1. 推送代码到 GitHub。
-2. 打开 `Actions` -> `Build Windows App`。
-3. 点击 `Run workflow`。
-4. 构建完成后，在 `windows-installers` artifact 中下载安装包。
+2. 打开 `Actions` -> `Release Desktop Apps`。
+3. 点击 `Run workflow`，输入版本号，例如 `v0.1.0`。
+4. 构建完成后，GitHub Releases 页面会生成同版本下载页，
+   里面包含 macOS `.dmg` 和 Windows `.exe/.msi` 安装包。
+
+如果只想单独构建 Windows 包，可以运行 `Build Windows App` 工作流，
+构建完成后在 `windows-installers` artifact 中下载安装包。
 
 如果在本地 Windows 机器构建，安装 Node.js、Python 3.12、Rust 和
 FFmpeg 后运行：
