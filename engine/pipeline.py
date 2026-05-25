@@ -1685,7 +1685,7 @@ def _mux_audio_with_volume(video_only: Path, audio_source: str, output: Path, vo
         "-shortest",
         str(output),
     ]
-    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    result = _run_media_command(command)
     return result.returncode == 0 and output.exists()
 
 
@@ -1731,7 +1731,7 @@ def _mux_mixed_audio(
         "-shortest",
         str(output),
     ]
-    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    result = _run_media_command(command)
     return result.returncode == 0 and output.exists()
 
 
@@ -1739,12 +1739,50 @@ def _format_audio_volume(volume: float) -> str:
     return f"{max(0.0, float(volume)):.4g}"
 
 
+def _run_media_command(command: list[str]) -> subprocess.CompletedProcess[str]:
+    kwargs: dict[str, Any] = {
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": True,
+        "check": False,
+    }
+    if os.name == "nt":
+        kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+    return subprocess.run(command, **kwargs)
+
+
 def _ffmpeg_binary() -> str | None:
     bundled_root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
-    bundled = bundled_root / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
-    if bundled.exists():
-        return str(bundled)
-    return shutil.which("ffmpeg")
+    executable_root = Path(sys.executable).parent
+    seen: set[Path] = set()
+    for root in (bundled_root, executable_root):
+        for candidate in _ffmpeg_candidates(root):
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            if candidate.exists():
+                return str(candidate)
+    for name in _ffmpeg_binary_names():
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
+
+
+def _ffmpeg_candidates(root: Path) -> list[Path]:
+    directories = [
+        root,
+        root / "_internal",
+        root / "bin",
+        root / "ffmpeg" / "bin",
+    ]
+    return [directory / name for directory in directories for name in _ffmpeg_binary_names()]
+
+
+def _ffmpeg_binary_names() -> tuple[str, ...]:
+    if os.name == "nt":
+        return ("ffmpeg.exe", "ffmpeg")
+    return ("ffmpeg",)
 
 
 def _parse_json_object(content: str) -> dict[str, Any]:

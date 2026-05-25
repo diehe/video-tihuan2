@@ -866,6 +866,29 @@ def test_mix_audio_uses_both_volume_controls(tmp_path: Path, monkeypatch) -> Non
     assert "apad[aout]" in filter_graph
 
 
+def test_audio_mux_hides_windows_subprocess_window(tmp_path: Path, monkeypatch) -> None:
+    video_only = tmp_path / "video-only.mp4"
+    output = tmp_path / "muxed.mp4"
+    video_only.write_bytes(b"video")
+    run_kwargs: dict[str, object] = {}
+
+    class Completed:
+        returncode = 0
+
+    def fake_run(_command, **kwargs):
+        run_kwargs.update(kwargs)
+        output.write_bytes(b"muxed")
+        return Completed()
+
+    monkeypatch.setattr(pipeline, "_ffmpeg_binary", lambda: "ffmpeg.exe")
+    monkeypatch.setattr(pipeline.os, "name", "nt", raising=False)
+    monkeypatch.setattr(pipeline.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+    monkeypatch.setattr(pipeline.subprocess, "run", fake_run)
+
+    assert pipeline._mux_audio_with_volume(video_only, "source.mp4", output, 1)
+    assert run_kwargs["creationflags"] == 0x08000000
+
+
 def test_ffmpeg_binary_prefers_bundled_pyinstaller_binary(tmp_path: Path, monkeypatch) -> None:
     bundled = tmp_path / "ffmpeg"
     bundled.write_text("fake ffmpeg")
@@ -874,6 +897,30 @@ def test_ffmpeg_binary_prefers_bundled_pyinstaller_binary(tmp_path: Path, monkey
     monkeypatch.setattr(pipeline.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
 
     assert pipeline._ffmpeg_binary() == str(bundled)
+
+
+def test_ffmpeg_binary_finds_nested_pyinstaller_binary(tmp_path: Path, monkeypatch) -> None:
+    bundled = tmp_path / "_internal" / "ffmpeg"
+    bundled.parent.mkdir()
+    bundled.write_text("fake ffmpeg")
+
+    monkeypatch.setattr(pipeline.sys, "_MEIPASS", str(tmp_path), raising=False)
+    monkeypatch.setattr(pipeline.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+
+    assert pipeline._ffmpeg_binary() == str(bundled)
+
+
+def test_windows_sidecar_spec_is_windowed() -> None:
+    spec = Path("packaging/video-tihuan-engine.spec").read_text()
+
+    assert "console=False" in spec
+
+
+def test_windows_sidecar_spec_avoids_chocolatey_ffmpeg_shim() -> None:
+    spec = Path("packaging/video-tihuan-engine.spec").read_text()
+
+    assert "ChocolateyInstall" in spec
+    assert '"lib" / "ffmpeg" / "tools" / "ffmpeg" / "bin" / "ffmpeg.exe"' in spec
 
 
 def test_chroma_api_analyze_preview_and_render(tmp_path: Path) -> None:

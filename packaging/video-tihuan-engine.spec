@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
+import os
 import shutil
 
 
@@ -13,7 +14,28 @@ if (OPENSSL_LIB / "libssl.3.dylib").exists():
 if (OPENSSL_LIB / "libcrypto.3.dylib").exists():
     EXTRA_DATAS.append((str((OPENSSL_LIB / "libcrypto.3.dylib").resolve()), "."))
 
-FFMPEG = shutil.which("ffmpeg")
+
+def _ffmpeg_candidates():
+    candidates = []
+    choco_root = Path(os.environ.get("ChocolateyInstall", r"C:\ProgramData\chocolatey"))
+    choco_tools = choco_root / "lib" / "ffmpeg" / "tools"
+    candidates.append(choco_root / "lib" / "ffmpeg" / "tools" / "ffmpeg" / "bin" / "ffmpeg.exe")
+    if choco_tools.exists():
+        candidates.extend(sorted(choco_tools.glob("**/ffmpeg.exe")))
+    found = shutil.which("ffmpeg.exe") or shutil.which("ffmpeg")
+    if found:
+        candidates.append(Path(found))
+    return candidates
+
+
+def _resolve_ffmpeg():
+    for candidate in _ffmpeg_candidates():
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
+FFMPEG = _resolve_ffmpeg()
 if FFMPEG:
     EXTRA_BINARIES.append((FFMPEG, "."))
 
@@ -46,7 +68,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
