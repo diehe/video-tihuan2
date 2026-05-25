@@ -792,6 +792,23 @@ def test_compose_chroma_frame_default_settings_cover_green_edge_halo() -> None:
         assert g < r * 0.75
 
 
+def test_stabilize_chroma_quad_reduces_small_frame_to_frame_jitter() -> None:
+    base = np.array([[60, 20], [140, 20], [140, 120], [60, 120]], dtype=np.float32)
+    previous = base
+    raw_centers: list[float] = []
+    smooth_centers: list[float] = []
+
+    for offset in [4, -4, 3, -3, 2, -2]:
+        current = base + np.array([offset, 0], dtype=np.float32)
+        raw_centers.append(float(current[:, 0].mean()))
+        previous = pipeline._stabilize_chroma_quad(previous, current)
+        smooth_centers.append(float(previous[:, 0].mean()))
+
+    raw_jitter = max(abs(current - last) for last, current in zip(raw_centers, raw_centers[1:]))
+    smooth_jitter = max(abs(current - last) for last, current in zip(smooth_centers, smooth_centers[1:]))
+    assert smooth_jitter < raw_jitter * 0.45
+
+
 def test_render_chroma_replacement_writes_video(tmp_path: Path) -> None:
     source = tmp_path / "source.mp4"
     replacement = tmp_path / "replacement.mp4"

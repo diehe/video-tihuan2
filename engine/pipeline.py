@@ -374,6 +374,7 @@ def compose_chroma_frame(
     fit_mode: str = "cover",
     feather: int = 3,
     mask_grow: int = 3,
+    warp_quad: np.ndarray | None = None,
 ) -> tuple[np.ndarray, ChromaFrameMetrics]:
     height, width = source.shape[:2]
     normalized_roi = _normalize_roi(roi, width, height)
@@ -387,8 +388,9 @@ def compose_chroma_frame(
     if quad is None:
         return source.copy(), metrics
 
+    target_quad = warp_quad if warp_quad is not None else quad
     mask = _adjust_chroma_mask(raw_mask, feather=feather, mask_grow=mask_grow)
-    warped = _warp_replacement_to_quad(replacement, quad, width, height, fit_mode)
+    warped = _warp_replacement_to_quad(replacement, target_quad, width, height, fit_mode)
     cleaned_source = _despill_green_source(source, mask)
     alpha = (mask.astype(np.float32) / 255.0)[:, :, None]
     composed = cleaned_source.astype(np.float32) * (1 - alpha) + warped.astype(np.float32) * alpha
@@ -480,11 +482,16 @@ def render_chroma_replacement(
             raise EngineError(f"无法读取替换视频: {replacement_path}")
 
         written = 0
+        stable_quad: np.ndarray | None = None
+        normalized_roi = _normalize_roi(roi, width, height)
         while True:
             ok, source_frame = source.read()
             if not ok:
                 break
             replacement_frame = replacement_frames[written % len(replacement_frames)]
+            current_quad = _chroma_quad_from_mask(_chroma_mask(source_frame, normalized_roi))
+            if current_quad is not None:
+                stable_quad = _stabilize_chroma_quad(stable_quad, current_quad)
             composed, _ = compose_chroma_frame(
                 source_frame,
                 replacement_frame,
@@ -492,6 +499,7 @@ def render_chroma_replacement(
                 fit_mode=fit_mode,
                 feather=feather,
                 mask_grow=mask_grow,
+                warp_quad=stable_quad,
             )
             writer.write(composed)
             written += 1
@@ -1522,6 +1530,23 @@ def _despill_green_source(source: np.ndarray, mask: np.ndarray) -> np.ndarray:
     g[spill] = max_rb[spill] * 0.92
     cleaned[:, :, 1] = g
     return np.clip(cleaned, 0, 255).astype(np.uint8)
+
+
+def _stabilize_chroma_quad(previous_quad: np.ndarray | None, current_quad: np.ndarray) -> np.ndarray:
+    current = current_quad.astype(np.float32)
+    if previous_quad is None:
+        return current
+
+    previous = previous_quad.astype(np.float32)
+    if not _is_plausible_planar_quad(previous, current):
+        return previous
+
+    previous_center = previous.mean(axis=0)
+    current_center = current.mean(axis=0)
+    diag = max(float(np.linalg.norm(previous[2] - previous[0])), 1.0)
+    shift_ratio = float(np.linalg.norm(current_center - previous_center)) / diag
+    current_weight = 0.18 if shift_ratio < 0.045 else 0.42
+    return (previous * (1.0 - current_weight) + current * current_weight).astype(np.float32)
 
 
 def _warp_replacement_to_quad(
