@@ -41,3 +41,22 @@ npm run package:app
 打包产物在 `src-tauri/target/release/bundle/`。构建机需要安装
 FFmpeg；脚本会把 `ffmpeg` 一起放入后端 sidecar，用户安装 App 后
 不需要单独安装 Python、Node、FFmpeg 或手动启动后端服务。
+
+### Windows 打包
+
+Windows 安装包需要在 Windows 构建环境中生成，因为 Tauri 桌面壳、
+PyInstaller 后端 sidecar、OpenCV wheel 都是平台相关产物。仓库内
+已提供 GitHub Actions 工作流：
+
+1. 推送代码到 GitHub。
+2. 打开 `Actions` -> `Build Windows App`。
+3. 点击 `Run workflow`。
+4. 构建完成后，在 `windows-installers` artifact 中下载安装包。
+
+如果在本地 Windows 机器构建，安装 Node.js、Python 3.12、Rust 和
+FFmpeg 后运行：
+
+```bash
+npm ci
+npm run package:app
+```

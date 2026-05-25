@@ -19,14 +19,24 @@ fi
 
 SIDECAR_VENV="${SIDECAR_VENV:-.venv-sidecar}"
 "$PYTHON" -m venv "$SIDECAR_VENV"
-"$SIDECAR_VENV/bin/python" -m pip install --upgrade pip
-"$SIDECAR_VENV/bin/python" -m pip install -r requirements.txt pyinstaller
-"$SIDECAR_VENV/bin/python" -m PyInstaller \
+if [[ -x "$SIDECAR_VENV/bin/python" ]]; then
+  VENV_PYTHON="$SIDECAR_VENV/bin/python"
+elif [[ -x "$SIDECAR_VENV/Scripts/python.exe" ]]; then
+  VENV_PYTHON="$SIDECAR_VENV/Scripts/python.exe"
+else
+  echo "Unable to find Python inside $SIDECAR_VENV" >&2
+  exit 1
+fi
+
+"$VENV_PYTHON" -m pip install --upgrade pip
+"$VENV_PYTHON" -m pip install -r requirements.txt pyinstaller
+"$VENV_PYTHON" -m PyInstaller \
   --clean \
   --distpath build/sidecar-dist \
   --workpath build/sidecar-work \
   packaging/video-tihuan-engine.spec
 
+extension=""
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64)
     target="aarch64-apple-darwin"
@@ -39,6 +49,7 @@ case "$(uname -s)-$(uname -m)" in
     ;;
   MINGW*|MSYS*|CYGWIN*)
     target="x86_64-pc-windows-msvc"
+    extension=".exe"
     ;;
   *)
     echo "Unsupported sidecar build platform: $(uname -s)-$(uname -m)" >&2
@@ -46,4 +57,4 @@ case "$(uname -s)-$(uname -m)" in
     ;;
 esac
 
-cp "build/sidecar-dist/video-tihuan-engine" "sidecars/video-tihuan-engine-${target}"
+cp "build/sidecar-dist/video-tihuan-engine${extension}" "sidecars/video-tihuan-engine-${target}${extension}"
