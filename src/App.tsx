@@ -24,6 +24,7 @@ import { appReducer, canAnalyze, canPreview, canRender, initialState } from "./l
 export function App() {
   const [state, dispatch] = useReducer(appReducer, initialState);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  const [zoomedPreview, setZoomedPreview] = useState<string | null>(null);
   const busy = ["analyzing", "previewing", "rendering"].includes(state.status);
   const analysisFrame = state.chromaAnalysis?.frame ?? null;
 
@@ -244,7 +245,19 @@ export function App() {
                 {state.chromaAnalysis ? <img src={state.chromaAnalysis.mask_image} alt="绿色 mask 预览" /> : <EmptyPreview text="等待绿幕识别" />}
               </PreviewCard>
               <PreviewCard title="合成预览">
-                {state.chromaPreview ? <img src={state.chromaPreview.image} alt="合成预览" /> : <EmptyPreview text="生成预览后显示" />}
+                {state.chromaPreview ? (
+                  <button
+                    aria-label="放大合成预览"
+                    className="preview-zoom-button"
+                    onClick={() => setZoomedPreview(state.chromaPreview?.image ?? null)}
+                    type="button"
+                  >
+                    <img src={state.chromaPreview.image} alt="合成预览" />
+                    <span>点击放大</span>
+                  </button>
+                ) : (
+                  <EmptyPreview text="生成预览后显示" />
+                )}
               </PreviewCard>
             </div>
 
@@ -270,6 +283,28 @@ export function App() {
           </button>
         </section>
       </section>
+
+      {zoomedPreview ? (
+        <div
+          aria-label="合成预览放大查看"
+          aria-modal="true"
+          className="preview-lightbox"
+          onClick={() => setZoomedPreview(null)}
+          role="dialog"
+        >
+          <div className="preview-lightbox-panel" onClick={(event) => event.stopPropagation()}>
+            <button
+              aria-label="关闭放大预览"
+              className="preview-lightbox-close"
+              onClick={() => setZoomedPreview(null)}
+              type="button"
+            >
+              关闭
+            </button>
+            <img src={zoomedPreview} alt="合成预览放大图" />
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

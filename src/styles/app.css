@@ -256,6 +256,101 @@ button:disabled {
   object-fit: contain;
 }
 
+.preview-zoom-button {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 190px;
+  padding: 0;
+  place-items: center;
+  color: #f8ffe9;
+  background: transparent;
+  border: 0;
+  cursor: zoom-in;
+}
+
+.preview-zoom-button img {
+  transition:
+    transform 0.18s ease,
+    filter 0.18s ease;
+}
+
+.preview-zoom-button:hover img,
+.preview-zoom-button:focus-visible img {
+  filter: brightness(1.07);
+  transform: scale(1.015);
+}
+
+.preview-zoom-button span {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 7px 11px;
+  color: #143315;
+  background: rgba(166, 240, 117, 0.94);
+  border: 1px solid rgba(255, 255, 247, 0.44);
+  border-radius: 999px;
+  box-shadow: 0 10px 22px rgba(10, 24, 12, 0.28);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.preview-zoom-button:focus-visible {
+  outline: 3px solid #a6f075;
+  outline-offset: -6px;
+}
+
+.preview-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  padding: 28px;
+  place-items: center;
+  background:
+    radial-gradient(circle at 24% 18%, rgba(154, 238, 111, 0.18), transparent 28%),
+    rgba(9, 17, 11, 0.78);
+  backdrop-filter: blur(14px);
+  cursor: zoom-out;
+}
+
+.preview-lightbox-panel {
+  position: relative;
+  display: grid;
+  max-width: min(92vw, 1280px);
+  max-height: 88vh;
+  padding: 18px;
+  place-items: center;
+  background: rgba(255, 253, 241, 0.1);
+  border: 1px solid rgba(255, 255, 247, 0.2);
+  border-radius: 28px;
+  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.4);
+  cursor: default;
+}
+
+.preview-lightbox-panel img {
+  display: block;
+  max-width: calc(92vw - 36px);
+  max-height: calc(88vh - 36px);
+  object-fit: contain;
+  border-radius: 18px;
+}
+
+.preview-lightbox-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 1;
+  min-height: 38px;
+  padding: 0 14px;
+  color: #143315;
+  background: #a6f075;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 12px 28px rgba(8, 24, 10, 0.24);
+  font-weight: 900;
+}
+
 .empty-preview {
   display: grid;
   width: 100%;

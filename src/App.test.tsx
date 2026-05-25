@@ -94,6 +94,34 @@ describe("App chroma-key wizard", () => {
     expect(await screen.findAllByText(/导出完成/)).toHaveLength(2);
   });
 
+  it("opens and closes an enlarged composed preview", async () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText("主体视频"), {
+      target: { value: "/tmp/source.mp4" },
+    });
+    fireEvent.change(screen.getByLabelText("替换视频"), {
+      target: { value: "/tmp/replacement.mp4" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /识别绿幕/ }));
+    await screen.findByText(/已识别绿幕/);
+
+    fireEvent.click(screen.getByRole("button", { name: /生成预览/ }));
+    await screen.findByText(/预览已生成/);
+
+    expect(screen.queryByRole("dialog", { name: "合成预览放大查看" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /放大合成预览/ }));
+
+    expect(await screen.findByRole("dialog", { name: "合成预览放大查看" })).toBeTruthy();
+    expect(screen.getByAltText("合成预览放大图")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭放大预览" }));
+
+    expect(screen.queryByRole("dialog", { name: "合成预览放大查看" })).toBeNull();
+  });
+
   it("resizes the ROI from a corner handle before previewing", async () => {
     Element.prototype.setPointerCapture = vi.fn();
     Element.prototype.releasePointerCapture = vi.fn();
