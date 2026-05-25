@@ -10,7 +10,7 @@ import {
   SlidersHorizontal,
   Wand2,
 } from "lucide-react";
-import { useReducer, useState } from "react";
+import { useReducer, useRef, useState } from "react";
 import {
   analyzeChroma,
   healthCheck,
@@ -332,23 +332,36 @@ function RoiEditor({
   roi: Rect | null;
   onChange: (roi: Rect) => void;
 }) {
+  type RoiDrag =
+    | {
+        type: "move";
+        pointerId: number;
+        startX: number;
+        startY: number;
+        startRoi: Rect;
+      }
+    | {
+        type: "resize";
+        corner: "nw" | "ne" | "se" | "sw";
+        pointerId: number;
+        startX: number;
+        startY: number;
+        startRoi: Rect;
+      };
   const activeRoi = roi ?? {
     x: Math.round(frame.width * 0.2),
     y: Math.round(frame.height * 0.15),
     width: Math.round(frame.width * 0.6),
     height: Math.round(frame.height * 0.7),
   };
-  const [drag, setDrag] = useState<{
-    type: "move" | "resize";
-    corner?: "nw" | "ne" | "se" | "sw";
-    pointerId: number;
-    startX: number;
-    startY: number;
-    startRoi: Rect;
-  } | null>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<RoiDrag | null>(null);
 
   function clientToFrame(event: React.PointerEvent<HTMLElement>) {
-    const rect = event.currentTarget.getBoundingClientRect();
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) {
+      return { x: 0, y: 0 };
+    }
     return {
       x: ((event.clientX - rect.left) / rect.width) * frame.width,
       y: ((event.clientY - rect.top) / rect.height) * frame.height,
@@ -368,7 +381,7 @@ function RoiEditor({
     };
   }
 
-  function resizeRoi(startRoi: Rect, corner: NonNullable<typeof drag>["corner"], dx: number, dy: number): Rect {
+  function resizeRoi(startRoi: Rect, corner: "nw" | "ne" | "se" | "sw", dx: number, dy: number): Rect {
     if (corner === "nw") {
       return clampRoi({
         x: startRoi.x + dx,
@@ -404,7 +417,9 @@ function RoiEditor({
   return (
     <div
       className="roi-stage"
+      ref={stageRef}
       onPointerMove={(event) => {
+        const drag = dragRef.current;
         if (!drag || drag.pointerId !== event.pointerId) return;
         const current = clientToFrame(event);
         const dx = current.x - drag.startX;
@@ -416,35 +431,39 @@ function RoiEditor({
         onChange(clampRoi({ ...drag.startRoi, x: drag.startRoi.x + dx, y: drag.startRoi.y + dy }));
       }}
       onPointerUp={(event) => {
-        if (drag?.pointerId === event.pointerId) {
+        if (dragRef.current?.pointerId === event.pointerId) {
           event.currentTarget.releasePointerCapture(event.pointerId);
-          setDrag(null);
+          dragRef.current = null;
         }
       }}
-      onPointerCancel={() => setDrag(null)}
+      onPointerCancel={() => {
+        dragRef.current = null;
+      }}
     >
       <img src={frame.image} alt="主体视频首帧" />
-      <button
+      <div
         aria-label="限定区域"
         className="roi-box"
         onPointerDown={(event) => {
+          event.preventDefault();
           const point = clientToFrame(event);
-          event.currentTarget.parentElement?.setPointerCapture(event.pointerId);
-          setDrag({
+          stageRef.current?.setPointerCapture(event.pointerId);
+          dragRef.current = {
             type: "move",
             pointerId: event.pointerId,
             startX: point.x,
             startY: point.y,
             startRoi: activeRoi,
-          });
+          };
         }}
+        role="button"
         style={{
           left: `${(activeRoi.x / frame.width) * 100}%`,
           top: `${(activeRoi.y / frame.height) * 100}%`,
           width: `${(activeRoi.width / frame.width) * 100}%`,
           height: `${(activeRoi.height / frame.height) * 100}%`,
         }}
-        type="button"
+        tabIndex={0}
       >
         <span>限定手机区域</span>
         {(["nw", "ne", "se", "sw"] as const).map((corner) => (
@@ -453,21 +472,22 @@ function RoiEditor({
             className={`roi-handle ${corner}`}
             key={corner}
             onPointerDown={(event) => {
+              event.preventDefault();
               event.stopPropagation();
               const point = clientToFrame(event);
-              event.currentTarget.closest(".roi-stage")?.setPointerCapture(event.pointerId);
-              setDrag({
+              stageRef.current?.setPointerCapture(event.pointerId);
+              dragRef.current = {
                 type: "resize",
                 corner,
                 pointerId: event.pointerId,
                 startX: point.x,
                 startY: point.y,
                 startRoi: activeRoi,
-              });
+              };
             }}
           />
         ))}
-      </button>
+      </div>
     </div>
   );
 }
