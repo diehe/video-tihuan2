@@ -832,6 +832,40 @@ def test_render_chroma_replacement_writes_video(tmp_path: Path) -> None:
     assert result.duration > 0
 
 
+def test_mix_audio_uses_both_volume_controls(tmp_path: Path, monkeypatch) -> None:
+    video_only = tmp_path / "video-only.mp4"
+    output = tmp_path / "mixed.mp4"
+    video_only.write_bytes(b"video")
+    commands: list[list[str]] = []
+
+    class Completed:
+        returncode = 0
+
+    def fake_run(command, **_kwargs):
+        commands.append(command)
+        output.write_bytes(b"mixed")
+        return Completed()
+
+    monkeypatch.setattr(pipeline.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(pipeline.subprocess, "run", fake_run)
+
+    assert pipeline._mux_mixed_audio(
+        video_only,
+        "source.mp4",
+        "replacement.mp4",
+        output,
+        source_volume=0.76,
+        replacement_volume=0.42,
+    )
+
+    command = commands[0]
+    filter_graph = command[command.index("-filter_complex") + 1]
+    assert "[1:a:0]volume=0.76[a0]" in filter_graph
+    assert "[2:a:0]volume=0.42[a1]" in filter_graph
+    assert "[a0][a1]amix=inputs=2" in filter_graph
+    assert "apad[aout]" in filter_graph
+
+
 def test_chroma_api_analyze_preview_and_render(tmp_path: Path) -> None:
     source = tmp_path / "source.mp4"
     replacement = tmp_path / "replacement.mp4"
@@ -875,6 +909,8 @@ def test_chroma_api_analyze_preview_and_render(tmp_path: Path) -> None:
             "output_path": str(output),
             "roi": roi,
             "audio_policy": "silent",
+            "source_audio_volume": 25,
+            "replacement_audio_volume": 75,
             "fit_mode": "cover",
             "feather": 1,
             "mask_grow": 0,
@@ -884,6 +920,8 @@ def test_chroma_api_analyze_preview_and_render(tmp_path: Path) -> None:
     assert render_response.status_code == 200
     render_data = render_response.json()
     assert render_data["frame_count"] == 6
+    assert render_data["source_audio_volume"] == 25
+    assert render_data["replacement_audio_volume"] == 75
     assert output.exists()
 
 

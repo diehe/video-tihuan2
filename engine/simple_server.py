@@ -29,7 +29,9 @@ class RenderRequest(BaseModel):
     replacement_path: str
     tracking: TrackingResult
     output_path: str | None = None
-    audio_policy: AudioPolicy = AudioPolicy.ORIGINAL
+    audio_policy: AudioPolicy = AudioPolicy.MIXED
+    source_audio_volume: float = 100
+    replacement_audio_volume: float = 100
     fit_mode: str = "stretch"
 
 
@@ -38,7 +40,9 @@ class ChromaRenderRequest(BaseModel):
     replacement_path: str
     output_path: str | None = None
     roi: dict[str, int] | None = None
-    audio_policy: AudioPolicy = AudioPolicy.ORIGINAL
+    audio_policy: AudioPolicy = AudioPolicy.MIXED
+    source_audio_volume: float = 100
+    replacement_audio_volume: float = 100
     fit_mode: str = "cover"
     feather: int = 3
     mask_grow: int = 3
@@ -104,6 +108,8 @@ class Handler(BaseHTTPRequestHandler):
                     tracking=request.tracking,
                     output_path=output_path,
                     audio_policy=request.audio_policy,
+                    source_audio_volume=request.source_audio_volume,
+                    replacement_audio_volume=request.replacement_audio_volume,
                     fit_mode=request.fit_mode,
                 )
             )
@@ -136,6 +142,8 @@ class Handler(BaseHTTPRequestHandler):
                     output_path=output_path,
                     roi=request.roi,
                     audio_policy=request.audio_policy,
+                    source_audio_volume=request.source_audio_volume,
+                    replacement_audio_volume=request.replacement_audio_volume,
                     fit_mode=request.fit_mode,
                     feather=request.feather,
                     mask_grow=request.mask_grow,

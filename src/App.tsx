@@ -87,6 +87,8 @@ export function App() {
         outputPath: state.outputPath,
         roi: state.roi,
         audioPolicy: state.audioPolicy,
+        sourceVolume: state.sourceVolume,
+        replacementVolume: state.replacementVolume,
         fitMode: state.fitMode,
         feather: state.feather,
         maskGrow: state.maskGrow,
@@ -197,16 +199,16 @@ export function App() {
                   <option value="contain">完整留边</option>
                 </select>
               </Field>
-              <Field label="音频">
-                <select
-                  value={state.audioPolicy}
-                  onChange={(event) => dispatch({ type: "setAudioPolicy", audioPolicy: event.target.value as never })}
-                >
-                  <option value="original">保留主体视频</option>
-                  <option value="replacement">使用替换视频</option>
-                  <option value="silent">静音</option>
-                </select>
-              </Field>
+              <VolumeField
+                label="主体视频音量"
+                value={state.sourceVolume}
+                onChange={(volume) => dispatch({ type: "setSourceVolume", volume })}
+              />
+              <VolumeField
+                label="手机视频音量"
+                value={state.replacementVolume}
+                onChange={(volume) => dispatch({ type: "setReplacementVolume", volume })}
+              />
               <Field label="边缘羽化">
                 <input
                   aria-label="边缘羽化"
@@ -314,6 +316,25 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <label className="field">
       <span>{label}</span>
       {children}
+    </label>
+  );
+}
+
+function VolumeField({ label, value, onChange }: { label: string; value: number; onChange: (volume: number) => void }) {
+  return (
+    <label className="field volume-field">
+      <span>
+        {label}
+        <em>{value}%</em>
+      </span>
+      <input
+        aria-label={label}
+        max="100"
+        min="0"
+        onChange={(event) => onChange(Number(event.target.value))}
+        type="range"
+        value={value}
+      />
     </label>
   );
 }

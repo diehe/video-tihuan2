@@ -88,7 +88,14 @@ describe("api client", () => {
   it("posts chroma render requests without tracking data", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ output_path: "/tmp/out.mp4", frame_count: 12, duration: 1, audio_policy: "original" }),
+      json: async () => ({
+        output_path: "/tmp/out.mp4",
+        frame_count: 12,
+        duration: 1,
+        audio_policy: "mixed",
+        source_audio_volume: 80,
+        replacement_audio_volume: 35,
+      }),
     });
 
     const result = await renderChromaReplacement(
@@ -98,7 +105,9 @@ describe("api client", () => {
         replacementPath: "/tmp/replacement.mp4",
         outputPath: "/tmp/out.mp4",
         roi,
-        audioPolicy: "original",
+        audioPolicy: "mixed",
+        sourceVolume: 80,
+        replacementVolume: 35,
         fitMode: "cover",
         feather: 2,
         maskGrow: -1,
@@ -108,6 +117,11 @@ describe("api client", () => {
 
     expect(result.frame_count).toBe(12);
     expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8765/chroma/render", expect.any(Object));
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).not.toHaveProperty("tracking");
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body).toMatchObject({
+      source_audio_volume: 80,
+      replacement_audio_volume: 35,
+    });
+    expect(body).not.toHaveProperty("tracking");
   });
 });

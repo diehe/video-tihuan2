@@ -21,6 +21,8 @@ export interface AppState {
   replacementPath: string;
   outputPath: string;
   audioPolicy: AudioPolicy;
+  sourceVolume: number;
+  replacementVolume: number;
   fitMode: FitMode;
   feather: number;
   maskGrow: number;
@@ -44,7 +46,9 @@ export const initialState: AppState = {
   sourcePath: "",
   replacementPath: "",
   outputPath: "",
-  audioPolicy: "original",
+  audioPolicy: "mixed",
+  sourceVolume: 100,
+  replacementVolume: 100,
   fitMode: "cover",
   feather: 3,
   maskGrow: 3,
@@ -69,6 +73,8 @@ export type Action =
   | { type: "setReplacementPath"; path: string }
   | { type: "setOutputPath"; path: string }
   | { type: "setAudioPolicy"; audioPolicy: AudioPolicy }
+  | { type: "setSourceVolume"; volume: number }
+  | { type: "setReplacementVolume"; volume: number }
   | { type: "setFitMode"; fitMode: FitMode }
   | { type: "setFeather"; feather: number }
   | { type: "setMaskGrow"; maskGrow: number }
@@ -103,6 +109,10 @@ export function appReducer(state: AppState, action: Action): AppState {
       return { ...state, outputPath: action.path };
     case "setAudioPolicy":
       return { ...state, audioPolicy: action.audioPolicy };
+    case "setSourceVolume":
+      return { ...state, sourceVolume: clampVolume(action.volume), renderResult: null };
+    case "setReplacementVolume":
+      return { ...state, replacementVolume: clampVolume(action.volume), renderResult: null };
     case "setFitMode":
       return { ...state, fitMode: action.fitMode };
     case "setFeather":
@@ -174,6 +184,10 @@ export function appReducer(state: AppState, action: Action): AppState {
     default:
       return state;
   }
+}
+
+function clampVolume(volume: number): number {
+  return Math.max(0, Math.min(100, Math.round(volume)));
 }
 
 export function canAnalyze(state: AppState): boolean {

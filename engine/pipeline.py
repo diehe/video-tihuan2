@@ -290,7 +290,9 @@ def render_replacement(
     replacement_path: str,
     tracking: TrackingResult,
     output_path: str,
-    audio_policy: AudioPolicy = AudioPolicy.ORIGINAL,
+    audio_policy: AudioPolicy = AudioPolicy.MIXED,
+    source_audio_volume: float | None = None,
+    replacement_audio_volume: float | None = None,
     fit_mode: str = "stretch",
 ) -> RenderResult:
     source = _open_capture(source_path)
@@ -330,18 +332,24 @@ def render_replacement(
         source.release()
         replacement.release()
 
-        if audio_policy == AudioPolicy.SILENT:
+        source_level, replacement_level, effective_policy = _audio_levels(
+            audio_policy,
+            source_audio_volume,
+            replacement_audio_volume,
+        )
+        if effective_policy == AudioPolicy.SILENT:
             shutil.copyfile(temp_video, output)
         else:
-            audio_source = source_path if audio_policy == AudioPolicy.ORIGINAL else replacement_path
-            if not _mux_audio(temp_video, audio_source, output):
+            if not _mux_audio_by_levels(temp_video, source_path, replacement_path, output, source_level, replacement_level):
                 shutil.copyfile(temp_video, output)
 
     return RenderResult(
         output_path=str(output),
         frame_count=written,
         duration=written / fps if fps else 0,
-        audio_policy=audio_policy,
+        audio_policy=effective_policy,
+        source_audio_volume=round(source_level * 100),
+        replacement_audio_volume=round(replacement_level * 100),
     )
 
 
@@ -453,7 +461,9 @@ def render_chroma_replacement(
     replacement_path: str,
     output_path: str,
     roi: dict[str, int] | None = None,
-    audio_policy: AudioPolicy = AudioPolicy.ORIGINAL,
+    audio_policy: AudioPolicy = AudioPolicy.MIXED,
+    source_audio_volume: float | None = None,
+    replacement_audio_volume: float | None = None,
     fit_mode: str = "cover",
     feather: int = 3,
     mask_grow: int = 3,
@@ -508,18 +518,24 @@ def render_chroma_replacement(
         source.release()
         replacement.release()
 
-        if audio_policy == AudioPolicy.SILENT:
+        source_level, replacement_level, effective_policy = _audio_levels(
+            audio_policy,
+            source_audio_volume,
+            replacement_audio_volume,
+        )
+        if effective_policy == AudioPolicy.SILENT:
             shutil.copyfile(temp_video, output)
         else:
-            audio_source = source_path if audio_policy == AudioPolicy.ORIGINAL else replacement_path
-            if not _mux_audio(temp_video, audio_source, output):
+            if not _mux_audio_by_levels(temp_video, source_path, replacement_path, output, source_level, replacement_level):
                 shutil.copyfile(temp_video, output)
 
     return RenderResult(
         output_path=str(output),
         frame_count=written,
         duration=written / fps if fps else 0,
-        audio_policy=audio_policy,
+        audio_policy=effective_policy,
+        source_audio_volume=round(source_level * 100),
+        replacement_audio_volume=round(replacement_level * 100),
     )
 
 
@@ -1583,9 +1599,68 @@ def _mask_preview(frame: np.ndarray, mask: np.ndarray) -> np.ndarray:
     )
 
 
+def _audio_levels(
+    audio_policy: AudioPolicy | str,
+    source_audio_volume: float | None,
+    replacement_audio_volume: float | None,
+) -> tuple[float, float, AudioPolicy]:
+    policy = AudioPolicy(audio_policy)
+    if source_audio_volume is None and replacement_audio_volume is None:
+        if policy == AudioPolicy.SILENT:
+            return 0, 0, AudioPolicy.SILENT
+        if policy == AudioPolicy.REPLACEMENT:
+            return 0, 1, AudioPolicy.REPLACEMENT
+        if policy == AudioPolicy.MIXED:
+            return 1, 1, AudioPolicy.MIXED
+        return 1, 0, AudioPolicy.ORIGINAL
+
+    source_level = _volume_percent_to_level(source_audio_volume or 0)
+    replacement_level = _volume_percent_to_level(replacement_audio_volume or 0)
+    if source_level <= 0 and replacement_level <= 0:
+        return 0, 0, AudioPolicy.SILENT
+    if source_level > 0 and replacement_level > 0:
+        return source_level, replacement_level, AudioPolicy.MIXED
+    if source_level > 0:
+        return source_level, 0, AudioPolicy.ORIGINAL
+    return 0, replacement_level, AudioPolicy.REPLACEMENT
+
+
+def _volume_percent_to_level(volume: float) -> float:
+    return max(0.0, min(100.0, float(volume))) / 100.0
+
+
+def _mux_audio_by_levels(
+    video_only: Path,
+    source_path: str,
+    replacement_path: str,
+    output: Path,
+    source_level: float,
+    replacement_level: float,
+) -> bool:
+    if source_level > 0 and replacement_level > 0:
+        if _mux_mixed_audio(video_only, source_path, replacement_path, output, source_level, replacement_level):
+            return True
+        return _mux_audio_with_volume(video_only, source_path, output, source_level) or _mux_audio_with_volume(
+            video_only,
+            replacement_path,
+            output,
+            replacement_level,
+        )
+    if source_level > 0:
+        return _mux_audio_with_volume(video_only, source_path, output, source_level)
+    if replacement_level > 0:
+        return _mux_audio_with_volume(video_only, replacement_path, output, replacement_level)
+    return False
+
+
 def _mux_audio(video_only: Path, audio_source: str, output: Path) -> bool:
+    return _mux_audio_with_volume(video_only, audio_source, output, 1)
+
+
+def _mux_audio_with_volume(video_only: Path, audio_source: str, output: Path, volume: float) -> bool:
     if not shutil.which("ffmpeg"):
         return False
+    volume_label = _format_audio_volume(volume)
     command = [
         "ffmpeg",
         "-y",
@@ -1593,10 +1668,12 @@ def _mux_audio(video_only: Path, audio_source: str, output: Path) -> bool:
         str(video_only),
         "-i",
         audio_source,
+        "-filter_complex",
+        f"[1:a:0]volume={volume_label},apad[aout]",
         "-map",
         "0:v:0",
         "-map",
-        "1:a:0?",
+        "[aout]",
         "-c:v",
         "libx264",
         "-pix_fmt",
@@ -1608,6 +1685,55 @@ def _mux_audio(video_only: Path, audio_source: str, output: Path) -> bool:
     ]
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
     return result.returncode == 0 and output.exists()
+
+
+def _mux_mixed_audio(
+    video_only: Path,
+    source_path: str,
+    replacement_path: str,
+    output: Path,
+    source_volume: float,
+    replacement_volume: float,
+) -> bool:
+    if not shutil.which("ffmpeg"):
+        return False
+    source_label = _format_audio_volume(source_volume)
+    replacement_label = _format_audio_volume(replacement_volume)
+    filter_graph = (
+        f"[1:a:0]volume={source_label}[a0];"
+        f"[2:a:0]volume={replacement_label}[a1];"
+        "[a0][a1]amix=inputs=2:duration=longest:dropout_transition=0,apad[aout]"
+    )
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(video_only),
+        "-i",
+        source_path,
+        "-i",
+        replacement_path,
+        "-filter_complex",
+        filter_graph,
+        "-map",
+        "0:v:0",
+        "-map",
+        "[aout]",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-shortest",
+        str(output),
+    ]
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    return result.returncode == 0 and output.exists()
+
+
+def _format_audio_volume(volume: float) -> str:
+    return f"{max(0.0, float(volume)):.4g}"
 
 
 def _parse_json_object(content: str) -> dict[str, Any]:

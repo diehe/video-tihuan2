@@ -13,6 +13,7 @@ class AudioPolicy(StrEnum):
     ORIGINAL = "original"
     REPLACEMENT = "replacement"
     SILENT = "silent"
+    MIXED = "mixed"
 
 
 class FramePreview(BaseModel):
@@ -72,6 +73,8 @@ class RenderResult(BaseModel):
     frame_count: int
     duration: float
     audio_policy: AudioPolicy
+    source_audio_volume: float = Field(default=100, ge=0, le=100)
+    replacement_audio_volume: float = Field(default=100, ge=0, le=100)
 
 
 class ChromaFrameMetrics(BaseModel):

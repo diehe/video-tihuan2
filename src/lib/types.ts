@@ -1,6 +1,6 @@
 export type Point = [number, number];
 export type Quad = [Point, Point, Point, Point];
-export type AudioPolicy = "original" | "replacement" | "silent";
+export type AudioPolicy = "original" | "replacement" | "silent" | "mixed";
 export type FitMode = "stretch" | "cover" | "contain";
 
 export interface Rect {
@@ -80,4 +80,6 @@ export interface RenderResult {
   frame_count: number;
   duration: number;
   audio_policy: AudioPolicy;
+  source_audio_volume: number;
+  replacement_audio_volume: number;
 }

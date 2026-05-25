@@ -5,6 +5,16 @@ describe("workflow reducer", () => {
   it("defaults to cover fit mode for phone-screen green-screen replacement", () => {
     expect(initialState.fitMode).toBe("cover");
     expect(initialState.maskGrow).toBe(3);
+    expect(initialState.sourceVolume).toBe(100);
+    expect(initialState.replacementVolume).toBe(100);
+  });
+
+  it("updates both audio volume controls", () => {
+    let state = appReducer(initialState, { type: "setSourceVolume", volume: 72 });
+    state = appReducer(state, { type: "setReplacementVolume", volume: 38 });
+
+    expect(state.sourceVolume).toBe(72);
+    expect(state.replacementVolume).toBe(38);
   });
 
   it("requires source, replacement, and backend before chroma analysis", () => {

@@ -55,7 +55,9 @@ vi.mock("./lib/api", () => ({
     output_path: "/tmp/out.mp4",
     frame_count: 24,
     duration: 1,
-    audio_policy: "original",
+    audio_policy: "mixed",
+    source_audio_volume: 100,
+    replacement_audio_volume: 100,
   })),
   selectLocalPath: vi.fn(),
 }));
@@ -89,8 +91,17 @@ describe("App chroma-key wizard", () => {
     await waitFor(() => expect(previewChroma).toHaveBeenCalledWith(expect.objectContaining({ roi })));
     await screen.findByText(/预览已生成/);
 
+    fireEvent.change(screen.getByLabelText("主体视频音量"), { target: { value: "76" } });
+    fireEvent.change(screen.getByLabelText("手机视频音量"), { target: { value: "42" } });
     fireEvent.click(screen.getByRole("button", { name: /导出 MP4/ }));
     await waitFor(() => expect(renderChromaReplacement).toHaveBeenCalledTimes(1));
+    expect(renderChromaReplacement).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        sourceVolume: 76,
+        replacementVolume: 42,
+      }),
+    );
     expect(await screen.findAllByText(/导出完成/)).toHaveLength(2);
   });
 

@@ -173,6 +173,8 @@ export async function renderReplacement(
     tracking: TrackingResult;
     outputPath?: string;
     audioPolicy: AudioPolicy;
+    sourceVolume: number;
+    replacementVolume: number;
     fitMode: FitMode;
   },
   fetcher: typeof fetch = fetch,
@@ -185,6 +187,8 @@ export async function renderReplacement(
       tracking: payload.tracking,
       output_path: payload.outputPath || undefined,
       audio_policy: payload.audioPolicy,
+      source_audio_volume: payload.sourceVolume,
+      replacement_audio_volume: payload.replacementVolume,
       fit_mode: payload.fitMode,
     },
     fetcher,
@@ -199,6 +203,8 @@ export async function renderChromaReplacement(
     outputPath?: string;
     roi?: Rect | null;
     audioPolicy: AudioPolicy;
+    sourceVolume: number;
+    replacementVolume: number;
     fitMode: FitMode;
     feather: number;
     maskGrow: number;
@@ -213,6 +219,8 @@ export async function renderChromaReplacement(
       output_path: payload.outputPath || undefined,
       roi: payload.roi ?? undefined,
       audio_policy: payload.audioPolicy,
+      source_audio_volume: payload.sourceVolume,
+      replacement_audio_volume: payload.replacementVolume,
       fit_mode: payload.fitMode,
       feather: payload.feather,
       mask_grow: payload.maskGrow,

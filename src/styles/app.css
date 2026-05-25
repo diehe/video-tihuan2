@@ -221,8 +221,30 @@ button:disabled {
 
 .settings-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 12px;
+}
+
+.volume-field span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.volume-field em {
+  color: #2f7d35;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.volume-field input[type="range"] {
+  min-height: 44px;
+  padding: 0;
+  accent-color: #5ebd48;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .preview-grid {
