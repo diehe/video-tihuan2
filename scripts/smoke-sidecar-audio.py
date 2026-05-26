@@ -35,14 +35,21 @@ def main() -> int:
         _create_source_video(ffmpeg, source)
         _create_replacement_video(ffmpeg, replacement)
 
+        print(f"Starting packaged sidecar audio smoke test: {sidecar}", flush=True)
+        popen_kwargs: dict[str, object] = {
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+        }
+        if sys.platform == "win32":
+            popen_kwargs["creationflags"] = 0x08000000
         process = subprocess.Popen(
             [str(sidecar), "--host", "127.0.0.1", "--port", str(args.port)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+            **popen_kwargs,
         )
         try:
+            print("Waiting for sidecar health check...", flush=True)
             _wait_for_health(args.port)
+            print("Rendering audio smoke sample through packaged sidecar...", flush=True)
             _post_json(
                 args.port,
                 "/chroma/render",
@@ -59,6 +66,7 @@ def main() -> int:
                     "mask_grow": 3,
                 },
             )
+            print("Checking rendered output audio stream...", flush=True)
             _assert_audio_stream(ffprobe, output)
         finally:
             process.terminate()
@@ -66,10 +74,7 @@ def main() -> int:
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 process.kill()
-            stdout, stderr = process.communicate()
-            if process.returncode not in (0, -15, 1):
-                print(stdout, file=sys.stdout)
-                print(stderr, file=sys.stderr)
+                process.wait(timeout=5)
 
     print("Packaged sidecar audio smoke test passed.")
     return 0
