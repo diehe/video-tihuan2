@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -338,11 +339,15 @@ def render_replacement(
             source_audio_volume,
             replacement_audio_volume,
         )
-        if effective_policy == AudioPolicy.SILENT:
-            shutil.copyfile(temp_video, output)
-        else:
-            if not _mux_audio_by_levels(temp_video, source_path, replacement_path, output, source_level, replacement_level):
-                shutil.copyfile(temp_video, output)
+        _finalize_render_audio(
+            temp_video,
+            source_path,
+            replacement_path,
+            output,
+            effective_policy,
+            source_level,
+            replacement_level,
+        )
 
     return RenderResult(
         output_path=str(output),
@@ -524,11 +529,15 @@ def render_chroma_replacement(
             source_audio_volume,
             replacement_audio_volume,
         )
-        if effective_policy == AudioPolicy.SILENT:
-            shutil.copyfile(temp_video, output)
-        else:
-            if not _mux_audio_by_levels(temp_video, source_path, replacement_path, output, source_level, replacement_level):
-                shutil.copyfile(temp_video, output)
+        _finalize_render_audio(
+            temp_video,
+            source_path,
+            replacement_path,
+            output,
+            effective_policy,
+            source_level,
+            replacement_level,
+        )
 
     return RenderResult(
         output_path=str(output),
@@ -1606,9 +1615,9 @@ def _audio_levels(
     replacement_audio_volume: float | None,
 ) -> tuple[float, float, AudioPolicy]:
     policy = AudioPolicy(audio_policy)
+    if policy == AudioPolicy.SILENT:
+        return 0, 0, AudioPolicy.SILENT
     if source_audio_volume is None and replacement_audio_volume is None:
-        if policy == AudioPolicy.SILENT:
-            return 0, 0, AudioPolicy.SILENT
         if policy == AudioPolicy.REPLACEMENT:
             return 0, 1, AudioPolicy.REPLACEMENT
         if policy == AudioPolicy.MIXED:
@@ -1654,6 +1663,36 @@ def _mux_audio_by_levels(
     return False
 
 
+def _finalize_render_audio(
+    temp_video: Path,
+    source_path: str,
+    replacement_path: str,
+    output: Path,
+    effective_policy: AudioPolicy,
+    source_level: float,
+    replacement_level: float,
+) -> None:
+    if effective_policy == AudioPolicy.SILENT:
+        shutil.copyfile(temp_video, output)
+        return
+
+    if _mux_audio_by_levels(temp_video, source_path, replacement_path, output, source_level, replacement_level):
+        return
+
+    log_path = _engine_log_path()
+    _append_engine_log(
+        "audio mux failed after all fallback attempts\n"
+        f"source={source_path}\n"
+        f"replacement={replacement_path}\n"
+        f"output={output}\n"
+        f"policy={effective_policy.value}, source_level={source_level}, replacement_level={replacement_level}"
+    )
+    raise EngineError(
+        "音频合成失败：已停止导出无声视频。请确认主体视频或手机视频至少有一个带音轨；"
+        f"如果你想导出无声视频，把两个音量都调为 0。诊断日志：{log_path}"
+    )
+
+
 def _mux_audio(video_only: Path, audio_source: str, output: Path) -> bool:
     return _mux_audio_with_volume(video_only, audio_source, output, 1)
 
@@ -1661,6 +1700,7 @@ def _mux_audio(video_only: Path, audio_source: str, output: Path) -> bool:
 def _mux_audio_with_volume(video_only: Path, audio_source: str, output: Path, volume: float) -> bool:
     ffmpeg = _ffmpeg_binary()
     if not ffmpeg:
+        _append_engine_log("ffmpeg binary not found for single audio mux")
         return False
     volume_label = _format_audio_volume(volume)
     command = [
@@ -1699,6 +1739,7 @@ def _mux_mixed_audio(
 ) -> bool:
     ffmpeg = _ffmpeg_binary()
     if not ffmpeg:
+        _append_engine_log("ffmpeg binary not found for mixed audio mux")
         return False
     source_label = _format_audio_volume(source_volume)
     replacement_label = _format_audio_volume(replacement_volume)
@@ -1748,7 +1789,34 @@ def _run_media_command(command: list[str]) -> subprocess.CompletedProcess[str]:
     }
     if os.name == "nt":
         kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
-    return subprocess.run(command, **kwargs)
+    result = subprocess.run(command, **kwargs)
+    if result.returncode != 0:
+        _append_engine_log(
+            "media command failed\n"
+            f"command={subprocess.list2cmdline(command)}\n"
+            f"returncode={result.returncode}\n"
+            f"stderr={result.stderr[-4000:] if result.stderr else ''}"
+        )
+    return result
+
+
+def _append_engine_log(message: str) -> None:
+    try:
+        path = _engine_log_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().isoformat(timespec="seconds")
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(f"[{timestamp}] {message}\n\n")
+    except OSError:
+        return
+
+
+def _engine_log_path() -> Path:
+    if os.name == "nt":
+        return Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir()) / "VideoTihuan" / "engine.log"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Logs" / "VideoTihuan" / "engine.log"
+    return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "video-tihuan" / "engine.log"
 
 
 def _ffmpeg_binary() -> str | None:

@@ -1,7 +1,11 @@
+import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import cv2
 import numpy as np
+import pytest
 from fastapi.testclient import TestClient
 
 import engine.api_server as api_server
@@ -16,6 +20,7 @@ from engine.pipeline import (
     _planar_tracking_mask,
     _refine_quad_by_template,
     _track_with_feature_matching,
+    EngineError,
     analyze_target,
     generate_ai_keyframes,
     read_frame_preview,
@@ -889,6 +894,116 @@ def test_audio_mux_hides_windows_subprocess_window(tmp_path: Path, monkeypatch) 
     assert run_kwargs["creationflags"] == 0x08000000
 
 
+def test_chroma_render_reports_audio_mux_failure(tmp_path: Path, monkeypatch) -> None:
+    source = tmp_path / "source.mp4"
+    replacement = tmp_path / "replacement.mp4"
+    output = tmp_path / "output.mp4"
+    _write_chroma_source_with_distractor(source, frames=4)
+    _write_replacement_video(replacement, frames=4)
+
+    monkeypatch.setattr(pipeline, "_mux_audio_by_levels", lambda *_args: False)
+
+    with pytest.raises(EngineError, match="音频合成失败"):
+        pipeline.render_chroma_replacement(
+            source_path=str(source),
+            replacement_path=str(replacement),
+            output_path=str(output),
+            roi={"x": 54, "y": 22, "width": 128, "height": 126},
+            audio_policy="mixed",
+            source_audio_volume=100,
+            replacement_audio_volume=100,
+        )
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg") or not shutil.which("ffprobe"), reason="ffmpeg and ffprobe are required")
+def test_chroma_render_preserves_audio_tracks_with_real_ffmpeg(tmp_path: Path) -> None:
+    source = tmp_path / "source.mp4"
+    replacement = tmp_path / "replacement.mp4"
+    output = tmp_path / "output.mp4"
+
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=320x240:r=12:d=2",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=2",
+            "-vf",
+            "drawbox=x=110:y=60:w=90:h=140:color=0x00ff00:t=fill",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            str(source),
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=s=160x240:r=12:d=2",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=880:duration=2",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            str(replacement),
+        ],
+        check=True,
+    )
+
+    pipeline.render_chroma_replacement(
+        source_path=str(source),
+        replacement_path=str(replacement),
+        output_path=str(output),
+        roi={"x": 90, "y": 40, "width": 130, "height": 180},
+        audio_policy="mixed",
+        source_audio_volume=100,
+        replacement_audio_volume=100,
+    )
+
+    probe = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "a",
+            "-show_entries",
+            "stream=codec_name",
+            "-of",
+            "json",
+            str(output),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert json.loads(probe.stdout)["streams"]
+
+
 def test_ffmpeg_binary_prefers_bundled_pyinstaller_binary(tmp_path: Path, monkeypatch) -> None:
     bundled = tmp_path / "ffmpeg"
     bundled.write_text("fake ffmpeg")
@@ -921,6 +1036,12 @@ def test_windows_sidecar_spec_avoids_chocolatey_ffmpeg_shim() -> None:
 
     assert "ChocolateyInstall" in spec
     assert '"lib" / "ffmpeg" / "tools" / "ffmpeg" / "bin" / "ffmpeg.exe"' in spec
+
+
+def test_tauri_windows_app_uses_gui_subsystem() -> None:
+    main_rs = Path("src-tauri/src/main.rs").read_text()
+
+    assert '#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]' in main_rs
 
 
 def test_chroma_api_analyze_preview_and_render(tmp_path: Path) -> None:
@@ -977,8 +1098,8 @@ def test_chroma_api_analyze_preview_and_render(tmp_path: Path) -> None:
     assert render_response.status_code == 200
     render_data = render_response.json()
     assert render_data["frame_count"] == 6
-    assert render_data["source_audio_volume"] == 25
-    assert render_data["replacement_audio_volume"] == 75
+    assert render_data["source_audio_volume"] == 0
+    assert render_data["replacement_audio_volume"] == 0
     assert output.exists()
 
 

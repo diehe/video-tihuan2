@@ -37,6 +37,7 @@ def _resolve_ffmpeg():
 
 FFMPEG = _resolve_ffmpeg()
 if FFMPEG:
+    print(f"Bundling FFmpeg from: {FFMPEG}")
     EXTRA_BINARIES.append((FFMPEG, "."))
 
 

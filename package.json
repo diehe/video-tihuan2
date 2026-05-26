@@ -1,6 +1,6 @@
 {
   "name": "video-tihuan",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "build:sidecar": "bash scripts/build-sidecar.sh",
     "package:app": "npm run build:sidecar && npm run tauri build",
-    "package:app:windows": "npm run build:sidecar && npm run tauri build -- --bundles nsis",
+    "package:app:windows": "npm run build:sidecar && python scripts/smoke-sidecar-audio.py && npm run tauri build -- --bundles nsis",
     "test": "vitest run",
     "tauri": "tauri"
   },
