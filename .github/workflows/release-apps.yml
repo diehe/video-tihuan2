@@ -130,7 +130,7 @@ jobs:
             exit 1
           fi
 
-          notes=$'包含 macOS 和 Windows 桌面安装包。\n\nmacOS 首次打开如遇到系统安全提示，请在系统设置中允许打开。'
+          notes=$'包含 macOS 和 Windows 桌面安装包。\n\n本版重点修复：\n- Windows 安装前会自动清理旧版残留的后端进程，避免覆盖 video-tihuan-engine.exe 时报“Error opening file for writing”。\n- Windows 打包流程会继续执行真实 packaged sidecar 音频烟测，确认导出视频存在音轨。\n\nWindows 用户请下载 video-tihuan-windows-x64-setup.exe。\nmacOS 首次打开如遇到系统安全提示，请在系统设置中允许打开。'
           if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
             gh release upload "$TAG" "${files[@]}" --repo "$REPO" --clobber
           else

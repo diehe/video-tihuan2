@@ -1044,6 +1044,21 @@ def test_tauri_windows_app_uses_gui_subsystem() -> None:
     assert '#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]' in main_rs
 
 
+def test_windows_nsis_installer_uses_process_cleanup_hook() -> None:
+    config = json.loads(Path("src-tauri/tauri.conf.json").read_text())
+
+    assert config["bundle"]["windows"]["nsis"]["installerHooks"] == "nsis-hooks.nsh"
+
+
+def test_windows_nsis_hook_kills_locked_engine_before_install() -> None:
+    hook = Path("src-tauri/nsis-hooks.nsh").read_text(encoding="utf-8")
+
+    assert "!macro NSIS_HOOK_PREINSTALL" in hook
+    assert "video-tihuan-engine.exe" in hook
+    assert "taskkill.exe" in hook
+    assert "/F /T /IM" in hook
+
+
 def test_chroma_api_analyze_preview_and_render(tmp_path: Path) -> None:
     source = tmp_path / "source.mp4"
     replacement = tmp_path / "replacement.mp4"
